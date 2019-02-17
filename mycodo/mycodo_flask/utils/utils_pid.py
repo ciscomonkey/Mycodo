@@ -7,6 +7,8 @@ from flask import redirect
 from flask import url_for
 from flask_babel import gettext
 
+from mycodo.config_translations import TRANSLATIONS
+from mycodo.databases.models import DeviceMeasurements
 from mycodo.databases.models import DisplayOrder
 from mycodo.databases.models import Input
 from mycodo.databases.models import Math
@@ -19,8 +21,8 @@ from mycodo.mycodo_flask.utils.utils_general import controller_activate_deactiva
 from mycodo.mycodo_flask.utils.utils_general import delete_entry_with_id
 from mycodo.mycodo_flask.utils.utils_general import flash_form_errors
 from mycodo.mycodo_flask.utils.utils_general import flash_success_errors
-from mycodo.mycodo_flask.utils.utils_general import reorder
 from mycodo.utils.system_pi import csv_to_list_of_str
+from mycodo.utils.system_pi import get_measurement
 from mycodo.utils.system_pi import list_to_csv
 
 logger = logging.getLogger(__name__)
@@ -35,28 +37,30 @@ def pid_mod(form_mod_pid_base,
             form_mod_pid_pwm_raise, form_mod_pid_pwm_lower,
             form_mod_pid_output_raise, form_mod_pid_output_lower):
     action = '{action} {controller}'.format(
-        action=gettext("Modify"),
-        controller=gettext("PID"))
+        action=TRANSLATIONS['modify']['title'],
+        controller=TRANSLATIONS['pid']['title'])
     error = []
 
     if not form_mod_pid_base.validate():
-        error.append(gettext("Error in form field(s)"))
+        error.append(TRANSLATIONS['error']['title'])
         flash_form_errors(form_mod_pid_base)
 
     mod_pid = PID.query.filter(
-        PID.unique_id == form_mod_pid_base.pid_id.data).first()
+        PID.unique_id == form_mod_pid_base.function_id.data).first()
 
     # Check if a specific setting can be modified if the PID is active
     if mod_pid.is_activated:
-        error = can_set_output(error,
-                               form_mod_pid_base.pid_id.data,
-                               form_mod_pid_base.raise_output_id.data,
-                               form_mod_pid_base.lower_output_id.data)
+        error = can_set_output(
+            error,
+            form_mod_pid_base.function_id.data,
+            form_mod_pid_base.raise_output_id.data,
+            form_mod_pid_base.lower_output_id.data)
 
     mod_pid.name = form_mod_pid_base.name.data
     mod_pid.measurement = form_mod_pid_base.measurement.data
     mod_pid.direction = form_mod_pid_base.direction.data
     mod_pid.period = form_mod_pid_base.period.data
+    mod_pid.start_offset = form_mod_pid_base.start_offset.data
     mod_pid.max_measure_age = form_mod_pid_base.max_measure_age.data
     mod_pid.setpoint = form_mod_pid_base.setpoint.data
     mod_pid.band = abs(form_mod_pid_base.band.data)
@@ -68,20 +72,33 @@ def pid_mod(form_mod_pid_base,
     mod_pid.integrator_max = form_mod_pid_base.integrator_min.data
     mod_pid.method_id = form_mod_pid_base.method_id.data
 
+    # Change measurement information
+    if ',' in form_mod_pid_base.measurement.data:
+        measurement_id = form_mod_pid_base.measurement.data.split(',')[1]
+        selected_measurement = get_measurement(measurement_id)
+
+        measurements = DeviceMeasurements.query.filter(
+            DeviceMeasurements.device_id == form_mod_pid_base.function_id.data).all()
+        for each_measurement in measurements:
+            # Only set channels 0, 1, 2
+            if each_measurement.channel in [0, 1, 2]:
+                each_measurement.measurement = selected_measurement.measurement
+                each_measurement.unit = selected_measurement.unit
+
     if form_mod_pid_base.raise_output_id.data:
         raise_output_type = Output.query.filter(
             Output.unique_id == form_mod_pid_base.raise_output_id.data).first().output_type
         if mod_pid.raise_output_id == form_mod_pid_base.raise_output_id.data:
             if raise_output_type in ['pwm', 'command_pwm']:
                 if not form_mod_pid_pwm_raise.validate():
-                    error.append(gettext("Error in form field(s)"))
+                    error.append(TRANSLATIONS['error']['title'])
                     flash_form_errors(form_mod_pid_pwm_raise)
                 else:
                     mod_pid.raise_min_duration = form_mod_pid_pwm_raise.raise_min_duty_cycle.data
                     mod_pid.raise_max_duration = form_mod_pid_pwm_raise.raise_max_duty_cycle.data
             else:
                 if not form_mod_pid_output_raise.validate():
-                    error.append(gettext("Error in form field(s)"))
+                    error.append(TRANSLATIONS['error']['title'])
                     flash_form_errors(form_mod_pid_output_raise)
                 else:
                     mod_pid.raise_min_duration = form_mod_pid_output_raise.raise_min_duration.data
@@ -140,10 +157,9 @@ def pid_mod(form_mod_pid_base,
             # If the controller is active or paused, refresh variables in thread
             if mod_pid.is_activated:
                 control = DaemonControl()
-                return_value = control.pid_mod(form_mod_pid_base.pid_id.data)
-                flash(gettext(
-                    "PID Controller settings refresh response: %(resp)s",
-                    resp=return_value), "success")
+                return_value = control.pid_mod(form_mod_pid_base.function_id.data)
+                flash("PID Controller settings refresh response: "
+                      "{resp}".format(resp=return_value), "success")
     except Exception as except_msg:
         error.append(except_msg)
     flash_success_errors(error, action, url_for('routes_page.page_function'))
@@ -151,8 +167,8 @@ def pid_mod(form_mod_pid_base,
 
 def pid_del(pid_id):
     action = '{action} {controller}'.format(
-        action=gettext("Delete"),
-        controller=gettext("PID"))
+        action=TRANSLATIONS['delete']['title'],
+        controller=TRANSLATIONS['pid']['title'])
     error = []
 
     try:
@@ -161,11 +177,19 @@ def pid_del(pid_id):
         if pid.is_activated:
             pid_deactivate(pid_id)
 
-        delete_entry_with_id(PID, pid_id)
+        device_measurements = DeviceMeasurements.query.filter(
+            DeviceMeasurements.device_id == pid_id).all()
 
-        display_order = csv_to_list_of_str(DisplayOrder.query.first().pid)
-        display_order.remove(pid_id)
-        DisplayOrder.query.first().pid = list_to_csv(display_order)
+        for each_measurement in device_measurements:
+            delete_entry_with_id(DeviceMeasurements, each_measurement.unique_id)
+
+        delete_entry_with_id(PID, pid_id)
+        try:
+            display_order = csv_to_list_of_str(DisplayOrder.query.first().math)
+            display_order.remove(pid_id)
+            DisplayOrder.query.first().function = list_to_csv(display_order)
+        except Exception:  # id not in list
+            pass
         db.session.commit()
     except Exception as except_msg:
         error.append(except_msg)
@@ -173,20 +197,22 @@ def pid_del(pid_id):
     flash_success_errors(error, action, url_for('routes_page.page_function'))
 
 
-def pid_reorder(pid_id, display_order, direction):
+def pid_autotune(form_mod_pid_base):
     action = '{action} {controller}'.format(
-        action=gettext("Reorder"),
-        controller=gettext("PID"))
+        action=gettext("Start Autotune"),
+        controller=TRANSLATIONS['pid']['title'])
     error = []
     try:
-        status, reord_list = reorder(display_order,
-                                     pid_id,
-                                     direction)
-        if status == 'success':
-            DisplayOrder.query.first().pid = ','.join(map(str, reord_list))
-            db.session.commit()
-        else:
-            error.append(reord_list)
+        # Activate autotune flag in PID config
+        mod_pid = PID.query.filter(
+            PID.unique_id == form_mod_pid_base.function_id.data).first()
+        mod_pid.autotune_activated = True
+        mod_pid.autotune_noiseband = form_mod_pid_base.pid_autotune_noiseband.data
+        mod_pid.autotune_outstep = form_mod_pid_base.pid_autotune_outstep.data
+        db.session.commit()
+
+        # Activate PID
+        pid_activate(form_mod_pid_base.function_id.data)
     except Exception as except_msg:
         error.append(except_msg)
     flash_success_errors(error, action, url_for('routes_page.page_function'))
@@ -206,8 +232,8 @@ def has_required_pid_values(pid_id):
         flash(gettext("A valid Measurement is required"), "error")
         error = True
     if not pid.raise_output_id and not pid.lower_output_id:
-        flash(gettext("A Raise Output and/or a Lower Output is "
-                      "required"), "error")
+        flash(gettext("A Raise Output and/or a Lower Output is ""required"),
+              "error")
         error = True
     if error:
         return redirect('/pid')
@@ -218,8 +244,8 @@ def pid_activate(pid_id):
         return redirect(url_for('routes_page.page_function'))
 
     action = '{action} {controller}'.format(
-        action=gettext("Actuate"),
-        controller=gettext("PID"))
+        action=TRANSLATIONS['activate']['title'],
+        controller=TRANSLATIONS['pid']['title'])
     error = []
 
     # Check if associated sensor is activated
@@ -230,12 +256,12 @@ def pid_activate(pid_id):
         error, pid_id, pid.raise_output_id, pid.lower_output_id)
 
     device_unique_id = pid.measurement.split(',')[0]
-    input = Input.query.filter(
+    input_dev = Input.query.filter(
         Input.unique_id == device_unique_id).first()
     math = Math.query.filter(
         Math.unique_id == device_unique_id).first()
 
-    if (input and not input.is_activated) or (math and not math.is_activated):
+    if (input_dev and not input_dev.is_activated) or (math and not math.is_activated):
         error.append(gettext(
             "Cannot activate PID controller if the associated sensor "
             "controller is inactive"))
@@ -256,11 +282,8 @@ def pid_activate(pid_id):
             mod_pid = PID.query.filter(PID.unique_id == pid_id).first()
             mod_pid.method_start_time = 'Ready'
             db.session.commit()
-
         time.sleep(1)
-        controller_activate_deactivate('activate',
-                                       'PID',
-                                       pid_id)
+        controller_activate_deactivate('activate', 'PID', pid_id)
 
     flash_success_errors(error, action, url_for('routes_page.page_function'))
 
@@ -273,14 +296,12 @@ def pid_deactivate(pid_id):
     pid.is_paused = False
     db.session.commit()
     time.sleep(1)
-    controller_activate_deactivate('deactivate',
-                                   'PID',
-                                   pid_id)
+    controller_activate_deactivate('deactivate', 'PID', pid_id)
 
 
 def pid_manipulate(pid_id, action):
     if action not in ['Hold', 'Pause', 'Resume']:
-        flash(gettext("Invalid PID action: %(act)s", act=action), "error")
+        flash('{}: {}'.format(TRANSLATIONS['invalid']['title'], action), "error")
         return 1
 
     try:
@@ -307,20 +328,26 @@ def pid_manipulate(pid_id, action):
         elif action == 'Resume':
             return_value = control.pid_resume(pid_id)
         if return_value:
-            flash(gettext("Daemon response to PID controller %(act)s command: "
-                          "%(rval)s", act=action, rval=return_value), "success")
+            flash(
+                '{}: {}: {}: {}'.format(
+                    TRANSLATIONS['controller']['title'],
+                    TRANSLATIONS['pid']['title'],
+                    action,
+                    return_value),
+                "success")
     except Exception as err:
-        flash(gettext("Error: %(err)s",
-                      err='PID: {msg}'.format(msg=err)),
-              "error")
+        flash(
+            "{}: {}: {}".format(
+                TRANSLATIONS['Error']['title'],
+                TRANSLATIONS['PID']['title'], err),
+            "error")
 
 
 def can_set_output(error, pid_id, raise_output_id, lower_output_id):
     """ Don't allow an output to be used with more than one active PID """
     pid_all = (PID.query
                .filter(PID.is_activated == True)
-               .filter(PID.unique_id != pid_id)
-              ).all()
+               .filter(PID.unique_id != pid_id)).all()
     for each_pid in pid_all:
         if ((raise_output_id and
                 (raise_output_id == each_pid.raise_output_id or
@@ -329,6 +356,5 @@ def can_set_output(error, pid_id, raise_output_id, lower_output_id):
                 (lower_output_id == each_pid.lower_output_id or
                  lower_output_id == each_pid.raise_output_id))):
             error.append(gettext(
-                "Cannot set output if it is already "
-                "selected by another active PID controller"))
+                "Output already in use by another active PID controller"))
     return error

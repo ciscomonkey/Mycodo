@@ -2,9 +2,6 @@
 import logging
 import time
 
-from mycodo.devices.atlas_scientific_i2c import AtlasScientificI2C
-from mycodo.devices.atlas_scientific_uart import AtlasScientificUART
-
 logger = logging.getLogger("mycodo.atlas_scientific")
 
 
@@ -19,43 +16,57 @@ class AtlasScientificCommand:
         self.ph_sensor_i2c = None
         self.interface = input_dev.interface
 
-        if self.interface == 'UART':
+        if self.interface == 'FTDI':
+            from mycodo.devices.atlas_scientific_ftdi import AtlasScientificFTDI
+            self.ph_sensor_ftdi = AtlasScientificFTDI(
+                input_dev.ftdi_location)
+        elif self.interface == 'UART':
+            from mycodo.devices.atlas_scientific_uart import AtlasScientificUART
             self.ph_sensor_uart = AtlasScientificUART(
-                input_dev.device_loc, baudrate=input_dev.baud_rate)
+                input_dev.uart_location,
+                baudrate=input_dev.baud_rate)
         elif self.interface == 'I2C':
+            from mycodo.devices.atlas_scientific_i2c import AtlasScientificI2C
             self.ph_sensor_i2c = AtlasScientificI2C(
-                i2c_address=int(str(input_dev.location), 16),
+                i2c_address=int(str(input_dev.i2c_location), 16),
                 i2c_bus=input_dev.i2c_bus)
 
-        self.board_version, self.board_info = self.board_version()
+        self.board_version, self.board_info = self.get_board_version()
 
         if self.board_version == 0:
             logger.error("Unable to retrieve device info (this indicates the "
                          "device was not properly initialized or connected)")
         else:
-            logger.debug("Device Info: {info}".format(info=self.board_info))
-            logger.debug("Detected Version: {ver}".format(ver=self.board_version))
+            # TODO: Change back to debug
+            logger.error("Device Info: {info}".format(info=self.board_info))
+            logger.error("Detected Version: {ver}".format(ver=self.board_version))
 
-    def board_version(self):
+    def get_board_version(self):
         """Return the board version of the Atlas Scientific pH sensor"""
         info = None
 
         try:
-            if self.interface == 'UART':
-                info = self.ph_sensor_uart.query('i')[0]
+            if self.interface == 'FTDI':
+                info = self.ph_sensor_ftdi.query('i')
+            elif self.interface == 'UART':
+                info = self.ph_sensor_uart.query('i')
             elif self.interface == 'I2C':
                 info = self.ph_sensor_i2c.query('i')
         except TypeError:
             logger.exception("Unable to determine board version of Atlas sensor")
+            return 0, None
 
         # Check first letter of info response
         # "P" indicates a legacy board version
         if info is None:
             return 0, None
-        elif info[0] == 'P':
-            return 1, info  # Older board version
-        else:
-            return 2, info  # Newer board version
+        elif info is list:
+            for each_line in info:
+                if each_line == 'P':
+                    return 1, each_line  # Older board version
+                elif ',' in each_line and len(each_line.split(',')) == 3:
+                    return 2, each_line  # Newer board version
+        return 0, None
 
     def calibrate(self, command, temperature=None, custom_cmd=None):
         """
@@ -113,7 +124,9 @@ class AtlasScientificCommand:
         try:
             return_value = "No message"
             if cmd_send is not None:
-                if self.interface == 'UART':
+                if self.interface == 'FTDI':
+                    return_value = self.ph_sensor_ftdi.query(cmd_send)
+                elif self.interface == 'UART':
                     return_value = self.ph_sensor_uart.query(cmd_send)
                 elif self.interface == 'I2C':
                     return_value = self.ph_sensor_i2c.query(cmd_send)
@@ -126,4 +139,3 @@ class AtlasScientificCommand:
                          "the board: {err}".format(cls=type(self).__name__,
                                                    err=err))
             return 1, err
-

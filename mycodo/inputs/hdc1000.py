@@ -4,13 +4,68 @@
 #
 import array
 import fcntl
-import io
 import logging
 import time
 
-from .base_input import AbstractInput
-from .sensorutils import convert_units
-from .sensorutils import dewpoint
+import io
+
+from mycodo.databases.models import DeviceMeasurements
+from mycodo.inputs.base_input import AbstractInput
+from mycodo.inputs.sensorutils import calculate_dewpoint
+from mycodo.inputs.sensorutils import calculate_vapor_pressure_deficit
+from mycodo.utils.database import db_retrieve_table_daemon
+
+# Measurements
+measurements_dict = {
+    0: {
+        'measurement': 'temperature',
+        'unit': 'C'
+    },
+    1: {
+        'measurement': 'humidity',
+        'unit': 'percent'
+    },
+    2: {
+        'measurement': 'dewpoint',
+        'unit': 'C'
+    },
+    3: {
+        'measurement': 'vapor_pressure_deficit',
+        'unit': 'Pa'
+    }
+}
+
+# Input information
+INPUT_INFORMATION = {
+    'input_name_unique': 'HDC1000',
+    'input_manufacturer': 'Texas Instruments',
+    'input_name': 'HDC1000',
+    'measurements_name': 'Humidity/Temperature',
+    'measurements_dict': measurements_dict,
+
+    'options_enabled': [
+        'i2c_location',
+        'measurements_select',
+        'period',
+        'resolution',
+        'resolution_2',
+        'pre_output'
+    ],
+    'options_disabled': ['interface'],
+
+    'interfaces': ['I2C'],
+    'i2c_location': ['0x40'],
+    'i2c_address_editable': False,
+    'resolution': [
+        (11, 'Temperature 11-bit'),
+        (14, 'Temperature 14-bit')
+    ],
+    'resolution_2': [
+        (8, 'Humidity 8-bit'),
+        (11, 'Humidity 11-bit'),
+        (14, 'Humidity 14-bit')
+    ]
+}
 
 # I2C Address
 HDC1000_ADDRESS = 0x40  # 1000000
@@ -44,28 +99,28 @@ HDC1000_CONFIG_HUMIDITY_RESOLUTION_8BIT = 0x0200
 I2C_SLAVE = 0x0703
 
 
-class HDC1000Sensor(AbstractInput):
+class InputModule(AbstractInput):
     """
     A sensor support class that measures the HDC1000's humidity and temperature
     and calculates the dew point
 
     """
     def __init__(self, input_dev, testing=False):
-        super(HDC1000Sensor, self).__init__()
+        super(InputModule, self).__init__()
         self.logger = logging.getLogger("mycodo.inputs.hdc1000")
-        self._dew_point = None
-        self._humidity = None
-        self._temperature = None
-
-        self.resolution_temperature = input_dev.resolution
-        self.resolution_humidity = input_dev.resolution_2
 
         if not testing:
             self.logger = logging.getLogger(
-                "mycodo.inputs.hdc1000_{id}".format(id=input_dev.id))
+                "mycodo.hdc1000_{id}".format(id=input_dev.unique_id.split('-')[0]))
+
+            self.device_measurements = db_retrieve_table_daemon(
+                DeviceMeasurements).filter(
+                    DeviceMeasurements.device_id == input_dev.unique_id)
+
+            self.resolution_temperature = input_dev.resolution
+            self.resolution_humidity = input_dev.resolution_2
             self.i2c_bus = input_dev.i2c_bus
             self.i2c_address = 0x40  # HDC1000-F Address
-            self.convert_to_unit = input_dev.convert_to_unit
 
             self.HDC1000_fr = io.open("/dev/i2c-" + str(self.i2c_bus), "rb", buffering=0)
             self.HDC1000_fw = io.open("/dev/i2c-" + str(self.i2c_bus), "wb", buffering=0)
@@ -95,90 +150,29 @@ class HDC1000Sensor(AbstractInput):
             elif self.resolution_humidity == 14:
                 self.set_humidity_resolution(HDC1000_CONFIG_HUMIDITY_RESOLUTION_14BIT)
 
-    def __repr__(self):
-        """  Representation of object """
-        return "<{cls}(dewpoint={dpt})(humidity={hum})(temperature={temp})>".format(
-            cls=type(self).__name__,
-            dpt="{0:.2f}".format(self._dew_point),
-            hum="{0:.2f}".format(self._humidity),
-            temp="{0:.2f}".format(self._temperature))
-
-    def __str__(self):
-        """ Return measurement information """
-        return "Dew Point: {dpt}, Humidity: {hum}, Temperature: {temp}".format(
-            dpt="{0:.2f}".format(self._dew_point),
-            hum="{0:.2f}".format(self._humidity),
-            temp="{0:.2f}".format(self._temperature))
-
-    def __iter__(self):  # must return an iterator
-        """ HDC1000Sensor iterates through live measurement readings """
-        return self
-
-    def next(self):
-        """ Get next measurement reading """
-        if self.read():  # raised an error
-            raise StopIteration  # required
-        return dict(dewpoint=float('{0:.2f}'.format(self._dew_point)),
-                    humidity=float('{0:.2f}'.format(self._humidity)),
-                    temperature=float('{0:.2f}'.format(self._temperature)))
-
-    @property
-    def dew_point(self):
-        """ HDC1000 dew point in Celsius """
-        if self._dew_point is None:  # update if needed
-            self.read()
-        return self._dew_point
-
-    @property
-    def humidity(self):
-        """ HDC1000 relative humidity in percent """
-        if self._humidity is None:  # update if needed
-            self.read()
-        return self._humidity
-
-    @property
-    def temperature(self):
-        """ HDC1000 temperature in Celsius """
-        if self._temperature is None:  # update if needed
-            self.read()
-        return self._temperature
-
     def get_measurement(self):
         """ Gets the humidity and temperature """
-        self._dew_point = None
-        self._humidity = None
-        self._temperature = None
+        return_dict = measurements_dict.copy()
 
-        temperature = self.read_temperature()
-        humidity = self.read_humidity()
-        dew_pt = dewpoint(temperature, humidity)
+        if self.is_enabled(0):
+            return_dict[0]['value'] = self.read_temperature()
 
-        # Check for conversions
-        dew_pt = convert_units(
-            'dewpoint', 'celsius', self.convert_to_unit, dew_pt)
-        temperature = convert_units(
-            'temperature', 'celsius', self.convert_to_unit, temperature)
+        if self.is_enabled(1):
+            return_dict[1]['value'] = self.read_humidity()
 
-        return dew_pt, humidity, temperature
+        if (self.is_enabled(2) and
+                self.is_enabled(0) and
+                self.is_enabled(1)):
+            return_dict[2]['value'] = calculate_dewpoint(
+                return_dict[0]['value'], return_dict[1]['value'])
 
-    def read(self):
-        """
-        Takes a reading from the HDC1000 and updates the self._humidity and
-        self._temperature values
+        if (self.is_enabled(3) and
+                self.is_enabled(0) and
+                self.is_enabled(1)):
+            return_dict[3]['value'] = calculate_vapor_pressure_deficit(
+                return_dict[0]['value'], return_dict[1]['value'])
 
-        :returns: None on success or 1 on error
-        """
-        try:
-            (self._dew_point,
-             self._humidity,
-             self._temperature) = self.get_measurement()
-            if self._dew_point is not None:
-                return  # success - no errors
-        except Exception as e:
-            self.logger.exception(
-                "{cls} raised an exception when taking a reading: "
-                "{err}".format(cls=type(self).__name__, err=e))
-        return 1
+        return return_dict
 
     def read_temperature(self):
         s = [HDC1000_TEMPERATURE_REGISTER]  # temp

@@ -13,8 +13,10 @@ from wtforms import StringField
 from wtforms import SubmitField
 from wtforms import widgets
 from wtforms.validators import DataRequired
+from wtforms.widgets.html5 import NumberInput
 
 from mycodo.config import MATHS
+from mycodo.config_translations import TRANSLATIONS
 
 
 class MathAdd(FlaskForm):
@@ -22,38 +24,39 @@ class MathAdd(FlaskForm):
         choices=MATHS,
         validators=[DataRequired()]
     )
-    math_add = SubmitField(lazy_gettext('Add Math'))
+    math_add = SubmitField(
+        TRANSLATIONS['add']['title'])
 
 
 class MathMod(FlaskForm):
     math_id = StringField('Math ID', widget=widgets.HiddenInput())
     name = StringField(
-        lazy_gettext('Name'),
+        TRANSLATIONS['name']['title'],
         validators=[DataRequired()])
     period = DecimalField(
         lazy_gettext('Period (seconds)'),
-        validators=[DataRequired()])
+        validators=[DataRequired()],
+        widget=NumberInput(step='any'))
     max_measure_age = IntegerField(
-        lazy_gettext('Max Age (seconds)'),
-        validators=[DataRequired()])
-    inputs = SelectMultipleField(
-        lazy_gettext('Inputs'))
-    measure = StringField(
-        lazy_gettext('Measurement'),
-        validators=[DataRequired()])
-    measure_units = StringField(
-        lazy_gettext('Units'),
-        validators=[DataRequired()])
-    math_mod = SubmitField(lazy_gettext('Save'))
-    math_delete = SubmitField(lazy_gettext('Delete'))
-    math_activate = SubmitField(lazy_gettext('Activate'))
-    math_deactivate = SubmitField(lazy_gettext('Deactivate'))
-    math_order_up = SubmitField(lazy_gettext('Up'))
-    math_order_down = SubmitField(lazy_gettext('Down'))
+        TRANSLATIONS['max_age']['title'],
+        validators=[DataRequired()],
+        widget=NumberInput())
+    start_offset = DecimalField(
+        lazy_gettext('Start Offset (seconds)'),
+        widget=NumberInput(step='any'))
+    inputs = SelectMultipleField(lazy_gettext('Inputs'))
+    select_measurement_unit = StringField(TRANSLATIONS['select_measurement_unit']['title'])
+    measurements_enabled = SelectMultipleField(TRANSLATIONS['measurements_enabled']['title'])
+    math_mod = SubmitField(TRANSLATIONS['save']['title'])
+    math_delete = SubmitField(TRANSLATIONS['delete']['title'])
+    math_activate = SubmitField(TRANSLATIONS['activate']['title'])
+    math_deactivate = SubmitField(TRANSLATIONS['deactivate']['title'])
+    math_order_up = SubmitField(TRANSLATIONS['up']['title'])
+    math_order_down = SubmitField(TRANSLATIONS['down']['title'])
 
 
 class MathModAverageSingle(FlaskForm):
-    average_input = StringField(lazy_gettext('Input'))
+    average_input = StringField(TRANSLATIONS['input']['title'])
 
 
 class MathModDifference(FlaskForm):
@@ -62,7 +65,7 @@ class MathModDifference(FlaskForm):
 
 
 class MathModEquation(FlaskForm):
-    equation_input = StringField(lazy_gettext('Input'))
+    equation_input = StringField(TRANSLATIONS['input']['title'])
     equation = StringField(lazy_gettext('Equation'))
 
 
@@ -78,7 +81,30 @@ class MathModHumidity(FlaskForm):
                                  opt=lazy_gettext('optional')))
 
 
+class MathModRedundancy(FlaskForm):
+    order_of_use = SelectMultipleField(lazy_gettext('Order of Use'))
+
+
 class MathModVerification(FlaskForm):
     max_difference = DecimalField(
         lazy_gettext('Max Difference'),
-        validators=[DataRequired()])
+        validators=[DataRequired()],
+        widget=NumberInput(step='any'))
+
+
+class MathMeasurementMod(FlaskForm):
+    math_id = StringField('Math ID', widget=widgets.HiddenInput())
+    math_measurement_id = StringField(widget=widgets.HiddenInput())
+    name = StringField(
+        TRANSLATIONS['name']['title'],
+        validators=[DataRequired()]
+    )
+    select_measurement_unit = StringField(TRANSLATIONS['select_measurement_unit']['title'])
+    convert_to_measurement_unit = StringField(lazy_gettext('Convert to Measurement'))
+
+    math_measurement_mod = SubmitField(TRANSLATIONS['save']['title'])
+
+
+class MathModMisc(FlaskForm):
+    unique_id_1 = StringField()
+    unique_id_2 = StringField()

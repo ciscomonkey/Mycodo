@@ -1,89 +1,130 @@
 # coding=utf-8
 import logging
+import subprocess
 import time
 
-from w1thermsensor import W1ThermSensor
+from flask_babel import lazy_gettext
 
-from .base_input import AbstractInput
-from .sensorutils import convert_units
+from mycodo.inputs.base_input import AbstractInput
 
 
-class DS18S20Sensor(AbstractInput):
+def constraints_pass_measure_range(mod_input, value):
+    """
+    Check if the user input is acceptable
+    :param mod_input: SQL object with user-saved Input options
+    :param value: str
+    :return: tuple: (bool, list of strings)
+    """
+    errors = []
+    all_passed = True
+    # Ensure valid range is selected
+    if value not in ['w1thermsensor', 'ow_shell']:
+        all_passed = False
+        errors.append("Invalid range")
+    return all_passed, errors, mod_input
+
+
+# Measurements
+measurements_dict = {
+    0: {
+        'measurement': 'temperature',
+        'unit': 'C'
+    }
+}
+
+# Input information
+INPUT_INFORMATION = {
+    'input_name_unique': 'DS18S20',
+    'input_manufacturer': 'MAXIM',
+    'input_name': 'DS18S20',
+    'measurements_name': 'Temperature',
+    'measurements_dict': measurements_dict,
+
+    'options_enabled': [
+        'location',
+        'custom_options',
+        'period',
+        'pre_output'
+    ],
+    'options_disabled': ['interface'],
+
+    'dependencies_module': [
+        ('pip-pypi', 'w1thermsensor', 'w1thermsensor'),
+        ('apt', 'ow-shell', 'ow-shell')
+    ],
+
+    'interfaces': ['1WIRE'],
+
+    'custom_options': [
+        {
+            'id': 'library',
+            'type': 'select',
+            'default_value': 'w1thermsensor',
+            'options_select': [
+                ('w1thermsensor', 'w1thermsensor'),
+                ('ow_shell', 'ow-shell')
+            ],
+            'constraints_pass': constraints_pass_measure_range,
+            'name': lazy_gettext('Library'),
+            'phrase': lazy_gettext('Select the library used to communicate')
+        }
+    ]
+}
+
+
+class InputModule(AbstractInput):
     """ A sensor support class that monitors the DS18S20's temperature """
 
     def __init__(self, input_dev, testing=False):
-        super(DS18S20Sensor, self).__init__()
+        super(InputModule, self).__init__()
         self.logger = logging.getLogger("mycodo.inputs.ds18s20")
-        self._temperature = None
 
         if not testing:
+            from w1thermsensor import W1ThermSensor
             self.logger = logging.getLogger(
-                "mycodo.inputs.ds18s20_{id}".format(id=input_dev.id))
+                "mycodo.ds18s20_{id}".format(id=input_dev.unique_id.split('-')[0]))
+
             self.location = input_dev.location
-            self.convert_to_unit = input_dev.convert_to_unit
-            self.sensor = W1ThermSensor(W1ThermSensor.THERM_SENSOR_DS18S20,
-                                        self.location)
+            self.library = None
 
-    def __repr__(self):
-        """  Representation of object """
-        return "<{cls}(temperature={temp})>".format(
-            cls=type(self).__name__, temp="{0:.2f}".format(self._temperature))
+            if input_dev.custom_options:
+                for each_option in input_dev.custom_options.split(';'):
+                    option = each_option.split(',')[0]
+                    value = each_option.split(',')[1]
+                    if option == 'library':
+                        self.library = value
 
-    def __str__(self):
-        """ Return temperature information """
-        return "Temperature: {}".format("{0:.2f}".format(self._temperature))
-
-    def __iter__(self):  # must return an iterator
-        """ DS18S20Sensor iterates through live temperature readings """
-        return self
-
-    def next(self):
-        """ Get next temperature reading """
-        if self.read():  # raised an error
-            raise StopIteration  # required
-        return dict(temperature=float('{0:.2f}'.format(self._temperature)))
-
-    @property
-    def temperature(self):
-        """ DS18S20 temperature in celsius """
-        if self._temperature is None:  # update if needed
-            self.read()
-        return self._temperature
+            if self.library == 'w1thermsensor':
+                self.sensor = W1ThermSensor(W1ThermSensor.THERM_SENSOR_DS18S20,
+                                            self.location)
+            elif self.library == 'ow_shell':
+                pass
 
     def get_measurement(self):
         """ Gets the DS18S20's temperature in Celsius """
-        self._temperature = None
-        temperature = None
+        return_dict = measurements_dict.copy()
+
         n = 2
         for i in range(n):
             try:
-                temperature = self.sensor.get_temperature()
-                break
+                if self.library == 'w1thermsensor':
+                    return_dict[0]['value'] = self.sensor.get_temperature()
+                elif self.library == 'ow_shell':
+                    try:
+                        command = 'owread /{id}/temperature; echo'.format(
+                            id=self.location)
+                        owread = subprocess.Popen(
+                            command, stdout=subprocess.PIPE, shell=True)
+                        (owread_output, _) = owread.communicate()
+                        owread.wait()
+                        if owread_output:
+                            return_dict[0]['value'] = float(owread_output.decode("latin1"))
+                    except Exception:
+                        self.logger.exception(1)
+                return return_dict
             except Exception as e:
                 if i == n:
                     self.logger.exception(
                         "{cls} raised an exception when taking a reading: "
                         "{err}".format(cls=type(self).__name__, err=e))
                 time.sleep(1)
-
-        temperature = convert_units(
-            'temperature', 'celsius', self.convert_to_unit,
-            temperature)
-
-        return temperature
-
-    def read(self):
-        """
-        Takes a reading from the DS18S20 and updates the self._temperature value
-
-        :returns: None on success or 1 on error
-        """
-        try:
-            self._temperature = self.get_measurement()
-            if self._temperature is not None:
-                return  # success - no errors
-        except Exception as e:
-            self.logger.exception(
-                "{cls} raised an exception when taking a reading: "
-                "{err}".format(cls=type(self).__name__, err=e))
-        return 1

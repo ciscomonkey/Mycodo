@@ -3,11 +3,14 @@ import logging
 
 import sqlalchemy
 from RPi import GPIO
+from flask import current_app
 from flask import flash
 from flask import redirect
 from flask import url_for
 from flask_babel import gettext
 
+from mycodo.config import LCD_INFO
+from mycodo.config_translations import TRANSLATIONS
 from mycodo.databases.models import DisplayOrder
 from mycodo.databases.models import LCD
 from mycodo.databases.models import LCDData
@@ -19,6 +22,7 @@ from mycodo.mycodo_flask.utils.utils_general import delete_entry_with_id
 from mycodo.mycodo_flask.utils.utils_general import flash_form_errors
 from mycodo.mycodo_flask.utils.utils_general import flash_success_errors
 from mycodo.mycodo_flask.utils.utils_general import reorder
+from mycodo.mycodo_flask.utils.utils_general import return_dependencies
 from mycodo.utils.system_pi import csv_to_list_of_str
 from mycodo.utils.system_pi import list_to_csv
 
@@ -29,19 +33,51 @@ logger = logging.getLogger(__name__)
 # LCD Manipulation
 #
 
-def lcd_add(quantity):
+def lcd_add(form):
     action = '{action} {controller}'.format(
-        action=gettext("Add"),
-        controller=gettext("LCD"))
+        action=TRANSLATIONS['add']['title'],
+        controller=TRANSLATIONS['lcd']['title'])
     error = []
-    for _ in range(0, quantity):
-        try:
-            new_lcd = LCD()
-            new_lcd_data = LCDData()
-            if GPIO.RPI_REVISION == 2 or GPIO.RPI_REVISION == 3:
-                new_lcd.i2c_bus = 1
-            else:
-                new_lcd.i2c_bus = 0
+
+    if current_app.config['TESTING']:
+        dep_unmet = False
+    else:
+        dep_unmet, _ = return_dependencies(form.lcd_type.data)
+        if dep_unmet:
+            list_unmet_deps = []
+            for each_dep in dep_unmet:
+                list_unmet_deps.append(each_dep[0])
+            error.append("The {dev} device you're trying to add has unmet dependencies: {dep}".format(
+                dev=form.lcd_type.data, dep=', '.join(list_unmet_deps)))
+
+    try:
+        new_lcd = LCD()
+        new_lcd_data = LCDData()
+        if GPIO.RPI_REVISION == 2 or GPIO.RPI_REVISION == 3:
+            new_lcd.i2c_bus = 1
+        else:
+            new_lcd.i2c_bus = 0
+        new_lcd.lcd_type = form.lcd_type.data
+        new_lcd.name = str(LCD_INFO[form.lcd_type.data]['name'])
+
+        if form.lcd_type.data == '128x32_pioled':
+            new_lcd.location = '0x3c'
+            new_lcd.x_characters = 21
+            new_lcd.y_lines = 4
+        elif form.lcd_type.data == '128x64_pioled':
+            new_lcd.location = '0x3c'
+            new_lcd.x_characters = 21
+            new_lcd.y_lines = 8
+        elif form.lcd_type.data == '16x2_generic':
+            new_lcd.location = '0x27'
+            new_lcd.x_characters = 16
+            new_lcd.y_lines = 2
+        elif form.lcd_type.data == '16x4_generic':
+            new_lcd.location = '0x27'
+            new_lcd.x_characters = 16
+            new_lcd.y_lines = 4
+
+        if not error:
             new_lcd.save()
             new_lcd_data.lcd_id = new_lcd.unique_id
             new_lcd_data.save()
@@ -49,36 +85,37 @@ def lcd_add(quantity):
             DisplayOrder.query.first().lcd = add_display_order(
                 display_order, new_lcd.unique_id)
             db.session.commit()
-        except sqlalchemy.exc.OperationalError as except_msg:
-            error.append(except_msg)
-        except sqlalchemy.exc.IntegrityError as except_msg:
-            error.append(except_msg)
-        flash_success_errors(error, action, url_for('routes_page.page_lcd'))
+    except sqlalchemy.exc.OperationalError as except_msg:
+        error.append(except_msg)
+    except sqlalchemy.exc.IntegrityError as except_msg:
+        error.append(except_msg)
+    flash_success_errors(error, action, url_for('routes_page.page_lcd'))
+
+    if dep_unmet:
+        return 1
 
 
 def lcd_mod(form_mod_lcd):
     action = '{action} {controller}'.format(
-        action=gettext("Modify"),
-        controller=gettext("LCD"))
+        action=TRANSLATIONS['modify']['title'],
+        controller=TRANSLATIONS['lcd']['title'])
     error = []
 
-    lcd = LCD.query.filter(
+    mod_lcd = LCD.query.filter(
         LCD.unique_id == form_mod_lcd.lcd_id.data).first()
-    if lcd.is_activated:
+    if mod_lcd.is_activated:
         error.append(gettext("Deactivate LCD controller before modifying"
                              " its settings."))
 
     if not error:
         if form_mod_lcd.validate():
             try:
-                mod_lcd = LCD.query.filter(
-                    LCD.unique_id == form_mod_lcd.lcd_id.data).first()
                 mod_lcd.name = form_mod_lcd.name.data
-                mod_lcd.location = form_mod_lcd.location.data
+                if mod_lcd.lcd_type in ['16x2_generic',
+                                        '16x4_generic']:
+                    mod_lcd.location = form_mod_lcd.location.data
                 mod_lcd.i2c_bus = form_mod_lcd.i2c_bus.data
                 mod_lcd.period = form_mod_lcd.period.data
-                mod_lcd.x_characters = int(form_mod_lcd.lcd_type.data.split("x")[0])
-                mod_lcd.y_lines = int(form_mod_lcd.lcd_type.data.split("x")[1])
                 db.session.commit()
             except Exception as except_msg:
                 error.append(except_msg)
@@ -89,8 +126,8 @@ def lcd_mod(form_mod_lcd):
 
 def lcd_del(lcd_id):
     action = '{action} {controller}'.format(
-        action=gettext("Delete"),
-        controller=gettext("LCD"))
+        action=TRANSLATIONS['delete']['title'],
+        controller=TRANSLATIONS['lcd']['title'])
     error = []
 
     lcd = LCD.query.filter(
@@ -120,8 +157,8 @@ def lcd_del(lcd_id):
 
 def lcd_reorder(lcd_id, display_order, direction):
     action = '{action} {controller}'.format(
-        action=gettext("Reorder"),
-        controller=gettext("LCD"))
+        action=TRANSLATIONS['reorder']['title'],
+        controller=TRANSLATIONS['lcd']['title'])
     error = []
     try:
         status, reord_list = reorder(display_order,
@@ -139,8 +176,8 @@ def lcd_reorder(lcd_id, display_order, direction):
 
 def lcd_activate(lcd_id):
     action = '{action} {controller}'.format(
-        action=gettext("Activate"),
-        controller=gettext("LCD"))
+        action=TRANSLATIONS['activate']['title'],
+        controller=TRANSLATIONS['lcd']['title'])
     error = []
 
     try:
@@ -168,20 +205,14 @@ def lcd_activate(lcd_id):
                 "Cannot activate LCD if there are blank lines"))
 
         if not error:
-            controller_activate_deactivate(
-                'activate',
-                'LCD',
-                lcd_id)
+            controller_activate_deactivate('activate', 'LCD', lcd_id)
     except Exception as except_msg:
         error.append(except_msg)
     flash_success_errors(error, action, url_for('routes_page.page_lcd'))
 
 
 def lcd_deactivate(lcd_id):
-    controller_activate_deactivate(
-        'deactivate',
-        'LCD',
-        lcd_id)
+    controller_activate_deactivate('deactivate', 'LCD', lcd_id)
 
 
 def lcd_reset_flashing(lcd_id):
@@ -195,8 +226,8 @@ def lcd_reset_flashing(lcd_id):
 
 def lcd_display_add(form):
     action = '{action} {controller}'.format(
-        action=gettext("Add"),
-        controller=gettext("Display"))
+        action=TRANSLATIONS['add']['title'],
+        controller=TRANSLATIONS['display']['title'])
     error = []
 
     lcd = LCD.query.filter(
@@ -220,8 +251,8 @@ def lcd_display_add(form):
 
 def lcd_display_mod(form):
     action = '{action} {controller}'.format(
-        action=gettext("Mod"),
-        controller=gettext("Display"))
+        action=TRANSLATIONS['modify']['title'],
+        controller=TRANSLATIONS['display']['title'])
     error = []
 
     lcd = LCD.query.filter(
@@ -278,6 +309,42 @@ def lcd_display_mod(form):
                 mod_lcd_data.line_4_id = ''
                 mod_lcd_data.line_4_measurement = ''
 
+            if form.line_5_display.data:
+                mod_lcd_data.line_5_id = form.line_5_display.data.split(",")[0]
+                mod_lcd_data.line_5_measurement = form.line_5_display.data.split(",")[1]
+                mod_lcd_data.line_5_max_age = form.line_5_max_age.data
+                mod_lcd_data.line_5_decimal_places = form.line_5_decimal_places.data
+            else:
+                mod_lcd_data.line_5_id = ''
+                mod_lcd_data.line_5_measurement = ''
+
+            if form.line_6_display.data:
+                mod_lcd_data.line_6_id = form.line_6_display.data.split(",")[0]
+                mod_lcd_data.line_6_measurement = form.line_6_display.data.split(",")[1]
+                mod_lcd_data.line_6_max_age = form.line_6_max_age.data
+                mod_lcd_data.line_6_decimal_places = form.line_6_decimal_places.data
+            else:
+                mod_lcd_data.line_6_id = ''
+                mod_lcd_data.line_6_measurement = ''
+
+            if form.line_7_display.data:
+                mod_lcd_data.line_7_id = form.line_7_display.data.split(",")[0]
+                mod_lcd_data.line_7_measurement = form.line_7_display.data.split(",")[1]
+                mod_lcd_data.line_7_max_age = form.line_7_max_age.data
+                mod_lcd_data.line_7_decimal_places = form.line_7_decimal_places.data
+            else:
+                mod_lcd_data.line_7_id = ''
+                mod_lcd_data.line_7_measurement = ''
+
+            if form.line_8_display.data:
+                mod_lcd_data.line_8_id = form.line_8_display.data.split(",")[0]
+                mod_lcd_data.line_8_measurement = form.line_8_display.data.split(",")[1]
+                mod_lcd_data.line_8_max_age = form.line_8_max_age.data
+                mod_lcd_data.line_8_decimal_places = form.line_8_decimal_places.data
+            else:
+                mod_lcd_data.line_8_id = ''
+                mod_lcd_data.line_8_measurement = ''
+
             db.session.commit()
         except Exception as except_msg:
             error.append(except_msg)
@@ -286,8 +353,8 @@ def lcd_display_mod(form):
 
 def lcd_display_del(lcd_data_id, delete_last=False):
     action = '{action} {controller}'.format(
-        action=gettext("Delete"),
-        controller=gettext("Display"))
+        action=TRANSLATIONS['delete']['title'],
+        controller=TRANSLATIONS['display']['title'])
     error = []
 
     lcd_data_this = LCDData.query.filter(

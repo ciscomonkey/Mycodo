@@ -7,7 +7,7 @@
     <div class="col-sm-6 col-md-3 col-lg-2">
       {{form_base.name.label(class_='control-label')}}
       <div>
-        {{form_base.name(class_='form-control', value=_('PID Name'))}}
+        {{form_base.name(class_='form-control', value=_('PID'))}}
       </div>
     </div>
     <div class="col-sm-6 col-md-3 col-lg-2">
@@ -23,7 +23,7 @@
     <div class="col-sm-6 col-md-3 col-lg-2">
       {{form_base.height.label(class_='control-label')}}
       <div>
-        {{form_base.height(class_='form-control', value=200)}}
+        {{form_base.height(class_='form-control', value=205)}}
       </div>
     </div>
     <div class="col-sm-6 col-md-3 col-lg-2">
@@ -76,12 +76,12 @@
       <div>
         <select class="form-control" id="pid_id" name="pid_id" style="width: 100%;">
         {% if pid %}
-          <option value="">{{_('Select One')}}</option>
+          <option value="">{{dict_translation['select_one']['title']}}</option>
           {% for each_pid in pid -%}
           <option value="{{each_pid.unique_id}}">[{{'%02d' % each_pid.id}}] {{each_pid.name}}</option>
           {% endfor -%}
         {% else %}
-          <option value="">{{_('None Available')}}</option>
+          <option value="">{{dict_translation['none_available']['title']}}</option>
         {% endif %}
         </select>
       </div>

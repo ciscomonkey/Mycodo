@@ -2,13 +2,55 @@
 import logging
 import time
 
-import smbus
+from smbus2 import SMBus
 
-from .base_input import AbstractInput
-from .sensorutils import convert_units
+from mycodo.inputs.base_input import AbstractInput
+from mycodo.databases.models import DeviceMeasurements
+from mycodo.utils.database import db_retrieve_table_daemon
+
+# Measurements
+measurements_dict = {
+    0: {
+        'measurement': 'light',
+        'unit': 'lux'
+    },
+    1: {
+        'measurement': 'moisture',
+        'unit': 'unitless'
+    },
+    2: {
+        'measurement': 'temperature',
+        'unit': 'C'
+    }
+}
+
+# Input information
+INPUT_INFORMATION = {
+    'input_name_unique': 'CHIRP',
+    'input_manufacturer': 'Catnip Electronics',
+    'input_name': 'Chirp',
+    'measurements_name': 'Light/Moisture/Temperature',
+    'measurements_dict': measurements_dict,
+
+    'options_enabled': [
+        'i2c_location',
+        'measurements_select',
+        'period',
+        'pre_output'
+    ],
+    'options_disabled': ['interface'],
+
+    'dependencies_module': [
+        ('pip-pypi', 'smbus2', 'smbus2')
+    ],
+
+    'interfaces': ['I2C'],
+    'i2c_location': ['0x40'],
+    'i2c_address_editable': True
+}
 
 
-class ChirpSensor(AbstractInput):
+class InputModule(AbstractInput):
     """
     A sensor support class that measures the Chirp's moisture, temperature
     and light
@@ -16,98 +58,36 @@ class ChirpSensor(AbstractInput):
     """
 
     def __init__(self, input_dev, testing=False):
-        super(ChirpSensor, self).__init__()
+        super(InputModule, self).__init__()
         self.logger = logging.getLogger("mycodo.inputs.chirp")
-        self._lux = None
-        self._moisture = None
-        self._temperature = None
 
         if not testing:
             self.logger = logging.getLogger(
-                "mycodo.inputs.chirp_{id}".format(id=input_dev.id))
-            self.i2c_address = int(str(input_dev.location), 16)
+                "mycodo.chirp_{id}".format(id=input_dev.unique_id.split('-')[0]))
+
+            self.device_measurements = db_retrieve_table_daemon(
+                DeviceMeasurements).filter(
+                    DeviceMeasurements.device_id == input_dev.unique_id)
+
+            self.i2c_address = int(str(input_dev.i2c_location), 16)
             self.i2c_bus = input_dev.i2c_bus
-            self.convert_to_unit = input_dev.convert_to_unit
-            self.bus = smbus.SMBus(self.i2c_bus)
+            self.bus = SMBus(self.i2c_bus)
             self.filter_average('lux', init_max=3)
-
-    def __repr__(self):
-        """  Representation of object """
-        return "<{cls}(lux={lux})(moisture={moist})(temperature={temp})>".format(
-            cls=type(self).__name__,
-            lux="{0}".format(self._lux),
-            moist="{0}".format(self._moisture),
-            temp="{0:.2f}".format(self._temperature))
-
-    def __str__(self):
-        """ Return measurement information """
-        return "Light: {lux}, Moisture: {moist}, Temperature: {temp}".format(
-            lux="{0}".format(self._lux),
-            moist="{0}".format(self._moisture),
-            temp="{0:.2f}".format(self._temperature))
-
-    def __iter__(self):  # must return an iterator
-        """ ChirpSensor iterates through live measurement readings """
-        return self
-
-    def next(self):
-        """ Get next measurement reading """
-        if self.read():  # raised an error
-            raise StopIteration  # required
-        return dict(lux=float('{0}'.format(self._lux)),
-                    moisture=float('{0}'.format(self._moisture)),
-                    temperature=float('{0:.2f}'.format(self._temperature)))
-
-    @property
-    def lux(self):
-        """ Chirp light measurement """
-        if self._lux is None:  # update if needed
-            self.read()
-        return self._lux
-
-    @property
-    def moisture(self):
-        """ Chirp moisture measurement """
-        if self._moisture is None:  # update if needed
-            self.read()
-        return self._moisture
-
-    @property
-    def temperature(self):
-        """ Chirp temperature in Celsius """
-        if self._temperature is None:  # update if needed
-            self.read()
-        return self._temperature
 
     def get_measurement(self):
         """ Gets the light, moisture, and temperature """
-        self._lux = None
-        self._moisture = None
-        self._temperature = None
+        return_dict = measurements_dict.copy()
 
-        lux = self.filter_average('lux', measurement=self.light())
-        moisture = self.moist()
-        temperature = convert_units(
-            'temperature', 'celsius', self.convert_to_unit,
-            self.temp() / 10.0)
-        return lux, moisture, temperature
+        if self.is_enabled(0):
+            return_dict[0]['value'] = self.filter_average('lux', measurement=self.light())
 
-    def read(self):
-        """
-        Takes a reading from the AM2315 and updates the self.dew_point,
-        self._humidity, and self._temperature values
+        if self.is_enabled(1):
+            return_dict[1]['value'] = self.moist()
 
-        :returns: None on success or 1 on error
-        """
-        try:
-            self._lux, self._moisture, self._temperature = self.get_measurement()
-            if self._lux is not None:
-                return  # success - no errors
-        except Exception as e:
-            self.logger.exception(
-                "{cls} raised an exception when taking a reading: "
-                "{err}".format(cls=type(self).__name__, err=e))
-        return 1
+        if self.is_enabled(2):
+            return_dict[2]['value'] = self.temp() / 10.0
+
+        return return_dict
 
     def get_reg(self, reg):
         # read 2 bytes from register

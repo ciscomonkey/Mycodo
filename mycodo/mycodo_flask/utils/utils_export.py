@@ -17,6 +17,7 @@ from mycodo.config import ALEMBIC_VERSION
 from mycodo.config import INSTALL_DIRECTORY
 from mycodo.config import MYCODO_VERSION
 from mycodo.config import SQL_DATABASE_MYCODO
+from mycodo.config_translations import TRANSLATIONS
 from mycodo.mycodo_flask.utils.utils_general import flash_form_errors
 from mycodo.mycodo_flask.utils.utils_general import flash_success_errors
 from mycodo.utils.system_pi import assure_path_exists
@@ -29,14 +30,15 @@ logger = logging.getLogger(__name__)
 # Export
 #
 
+
 def export_measurements(form):
     """
     Take user input to query the InfluxDB and return a CSV file of timestamps
     and measurement values
     """
     action = '{action} {controller}'.format(
-        action=gettext("Export"),
-        controller=gettext("Measurements"))
+        action=TRANSLATIONS['export']['title'],
+        controller=TRANSLATIONS['measurement']['title'])
     error = []
 
     if form.validate():
@@ -50,11 +52,11 @@ def export_measurements(form):
                     time.strptime(end_time, '%m/%d/%Y %H:%M')))
 
                 unique_id = form.measurement.data.split(',')[0]
-                measurement = form.measurement.data.split(',')[1]
+                measurement_id = form.measurement.data.split(',')[1]
 
-                url = '/export_data/{meas}/{id}/{start}/{end}'.format(
-                    meas=measurement,
+                url = '/export_data/{id}/{meas}/{start}/{end}'.format(
                     id=unique_id,
+                    meas=measurement_id,
                     start=start_seconds, end=end_seconds)
                 return url
         except Exception as err:
@@ -72,8 +74,8 @@ def export_settings(form):
     to the user
     """
     action = '{action} {controller}'.format(
-        action=gettext("Export"),
-        controller=gettext("Settings"))
+        action=TRANSLATIONS['export']['title'],
+        controller=TRANSLATIONS['settings']['title'])
     error = []
 
     try:
@@ -104,8 +106,8 @@ def export_influxdb(form):
     it to the user
     """
     action = '{action} {controller}'.format(
-        action=gettext("Export"),
-        controller=gettext("Measurements"))
+        action=TRANSLATIONS['export']['title'],
+        controller=TRANSLATIONS['measurement']['title'])
     error = []
 
     try:
@@ -134,7 +136,7 @@ def export_influxdb(form):
             # Zip all files in the influx_backup directory
             data = io.BytesIO()
             with zipfile.ZipFile(data, mode='w') as z:
-                for root, dirs, files in os.walk(influx_backup_dir):
+                for _, _, files in os.walk(influx_backup_dir):
                     for filename in files:
                         z.write(os.path.join(influx_backup_dir, filename),
                                 filename)
@@ -149,17 +151,15 @@ def export_influxdb(form):
                 data,
                 mimetype='application/zip',
                 as_attachment=True,
-                attachment_filename=
-                    'Mycodo_{mv}_Influxdb_{iv}_{host}_{dt}.zip'.format(
-                        mv=MYCODO_VERSION, iv=influxd_version,
-                        host=socket.gethostname().replace(' ', ''),
-                        dt=datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
+                attachment_filename='Mycodo_{mv}_Influxdb_{iv}_{host}_{dt}.zip'.format(
+                     mv=MYCODO_VERSION, iv=influxd_version,
+                     host=socket.gethostname().replace(' ', ''),
+                     dt=datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
             )
     except Exception as err:
         error.append("Error: {}".format(err))
 
     flash_success_errors(error, action, url_for('routes_page.page_export'))
-
 
 
 #
@@ -168,13 +168,13 @@ def export_influxdb(form):
 
 def import_settings(form):
     """
-    Receive a zip file contatining a Mycodo settings database that was
+    Receive a zip file containing a Mycodo settings database that was
     exported with export_settings(), then back up the current Mycodo settings
     database and implement the one form the zip in its's place.
     """
     action = '{action} {controller}'.format(
-        action=gettext("Import"),
-        controller=gettext("Settings"))
+        action=TRANSLATIONS['import']['title'],
+        controller=TRANSLATIONS['settings']['title'])
     error = []
 
     try:
@@ -277,8 +277,8 @@ def import_settings(form):
                 # Stop Mycodo daemon (backend)
                 cmd = "{pth}/mycodo/scripts/mycodo_wrapper " \
                       "daemon_stop".format(
-                    pth=INSTALL_DIRECTORY)
-                out, _, _ = cmd_output(cmd)
+                        pth=INSTALL_DIRECTORY)
+                _, _, _ = cmd_output(cmd)
 
                 # Backup current database and replace with extracted mycodo.db
                 imported_database = os.path.join(
@@ -292,8 +292,8 @@ def import_settings(form):
                 # Start Mycodo daemon (backend)
                 cmd = "{pth}/mycodo/scripts/mycodo_wrapper " \
                       "daemon_start".format(
-                    pth=INSTALL_DIRECTORY)
-                out, _, _ = cmd_output(cmd)
+                        pth=INSTALL_DIRECTORY)
+                _, _, _ = cmd_output(cmd)
 
                 # Delete tmp directory if it exists
                 if os.path.isdir(tmp_folder):
@@ -317,8 +317,8 @@ def import_influxdb(form):
     in InfluxDB.
     """
     action = '{action} {controller}'.format(
-        action=gettext("Import"),
-        controller=gettext("Influxdb"))
+        action=TRANSLATIONS['import']['title'],
+        controller="Influxdb")
     error = []
 
     try:

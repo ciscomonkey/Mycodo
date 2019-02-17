@@ -21,7 +21,7 @@ class AtlasScientificUART:
         try:
             self.ser = serial.Serial(port=serial_device,
                                      baudrate=baudrate,
-                                     timeout=0)
+                                     timeout=5)
             self.setup = True
         except serial.SerialException as err:
             self.logger.exception(
@@ -31,7 +31,7 @@ class AtlasScientificUART:
 
     def read_line(self):
         """
-        taken from the ftdi library and modified to 
+        taken from the ftdi library and modified to
         use the ezo line separator "\r"
         """
         lsl = len('\r')
@@ -98,6 +98,9 @@ class AtlasScientificUART:
             self.logger.exception('UART device not initialized')
             return None
 
+    def write(self, cmd):
+        self.send_cmd(cmd)
+
     def send_cmd(self, cmd):
         """
         Send command to the Atlas Sensor.
@@ -106,7 +109,7 @@ class AtlasScientificUART:
         :return:
         """
         buf = "{cmd}\r".format(cmd=cmd)  # add carriage return
-        if type(buf) is str:
+        if isinstance(buf, str):
             buf = buf.encode()
         try:
             self.ser.write(buf)

@@ -2,16 +2,58 @@
 import logging
 import time
 
-import pigpio
-
+from mycodo.databases.models import DeviceMeasurements
 from mycodo.databases.models import Output
+from mycodo.inputs.base_input import AbstractInput
+from mycodo.inputs.sensorutils import calculate_dewpoint
+from mycodo.inputs.sensorutils import calculate_vapor_pressure_deficit
 from mycodo.utils.database import db_retrieve_table_daemon
-from .base_input import AbstractInput
-from .sensorutils import convert_units
-from .sensorutils import dewpoint
+
+# Measurements
+measurements_dict = {
+    0: {
+        'measurement': 'temperature',
+        'unit': 'C'
+    },
+    1: {
+        'measurement': 'humidity',
+        'unit': 'percent'
+    },
+    2: {
+        'measurement': 'dewpoint',
+        'unit': 'C'
+    },
+    3: {
+        'measurement': 'vapor_pressure_deficit',
+        'unit': 'Pa'
+    }
+}
+
+# Input information
+INPUT_INFORMATION = {
+    'input_name_unique': 'DHT22',
+    'input_manufacturer': 'AOSONG',
+    'input_name': 'DHT22',
+    'measurements_name': 'Humidity/Temperature',
+    'measurements_dict': measurements_dict,
+
+    'options_enabled': [
+        'gpio_location',
+        'measurements_select',
+        'period',
+        'pre_output'
+    ],
+    'options_disabled': ['interface'],
+
+    'dependencies_module': [
+        ('internal', 'file-exists /opt/mycodo/pigpio_installed', 'pigpio')
+    ],
+
+    'interfaces': ['GPIO']
+}
 
 
-class DHT22Sensor(AbstractInput):
+class InputModule(AbstractInput):
     """
     A sensor support class that measures the DHT22's humidity and temperature
     and calculates the dew point
@@ -36,11 +78,6 @@ class DHT22Sensor(AbstractInput):
     """
     def __init__(self, input_dev, testing=False):
         """
-        :param gpio: gpio pin number
-        :type gpio: int
-        :param power: Power pin number
-        :type power: int
-
         Instantiate with the Pi and gpio to which the DHT22 output
         pin is connected.
 
@@ -51,31 +88,33 @@ class DHT22Sensor(AbstractInput):
         Taking readings more often than about once every two seconds will
         eventually cause the DHT22 to hang.  A 3 second interval seems OK.
         """
-        super(DHT22Sensor, self).__init__()
+        super(InputModule, self).__init__()
         self.logger = logging.getLogger('mycodo.inputs.dht22')
-        self._dew_point = None
-        self._humidity = None
-        self._temperature = None
         self.temp_temperature = None
         self.temp_humidity = None
         self.temp_dew_point = None
+        self.temp_vpd = None
         self.power_output_id = None
         self.powered = False
         self.pi = None
 
         if not testing:
+            import pigpio
             from mycodo.mycodo_client import DaemonControl
             self.logger = logging.getLogger(
-                'mycodo.inputs.dht22_{id}'.format(id=input_dev.id))
+                'mycodo.dht22_{id}'.format(id=input_dev.unique_id.split('-')[0]))
 
-            self.convert_to_unit = input_dev.convert_to_unit
+            self.device_measurements = db_retrieve_table_daemon(
+                DeviceMeasurements).filter(
+                    DeviceMeasurements.device_id == input_dev.unique_id)
+
             self.power_output_id = input_dev.power_output_id
 
             self.control = DaemonControl()
+            self.pigpio = pigpio
+            self.pi = self.pigpio.pi()
 
-            self.pi = pigpio.pi()
-
-            self.gpio = int(input_dev.location)
+            self.gpio = int(input_dev.gpio_location)
             self.bad_CS = 0  # Bad checksum count
             self.bad_SM = 0  # Short message count
             self.bad_MM = 0  # Missing message count
@@ -91,59 +130,9 @@ class DHT22Sensor(AbstractInput):
 
         self.start_sensor()
 
-    def __repr__(self):
-        """  Representation of object """
-        return "<{cls}(dewpoint={dpt})(humidity={hum})(temperature={temp})>".format(
-            cls=type(self).__name__,
-            dpt="{0:.2f}".format(self._dew_point),
-            hum="{0:.2f}".format(self._humidity),
-            temp="{0:.2f}".format(self._temperature))
-
-    def __str__(self):
-        """ Return measurement information """
-        return "Dew Point: {dpt}, Humidity: {hum}, Temperature: {temp}".format(
-            dpt="{0:.2f}".format(self._dew_point),
-            hum="{0:.2f}".format(self._humidity),
-            temp="{0:.2f}".format(self._temperature))
-
-    def __iter__(self):  # must return an iterator
-        """ DHT22Sensor iterates through live measurement readings """
-        return self
-
-    def next(self):
-        """ Get next measurement reading """
-        if self.read():  # raised an error
-            raise StopIteration  # required
-        return dict(dewpoint=float('{0:.2f}'.format(self._dew_point)),
-                    humidity=float('{0:.2f}'.format(self._humidity)),
-                    temperature=float('{0:.2f}'.format(self._temperature)))
-
-    @property
-    def dew_point(self):
-        """ DHT22 dew point in Celsius """
-        if self._dew_point is None:  # update if needed
-            self.read()
-        return self._dew_point
-
-    @property
-    def humidity(self):
-        """ DHT22 relative humidity in percent """
-        if self._humidity is None:  # update if needed
-            self.read()
-        return self._humidity
-
-    @property
-    def temperature(self):
-        """ DHT22 temperature in Celsius """
-        if self._temperature is None:  # update if needed
-            self.read()
-        return self._temperature
-
     def get_measurement(self):
         """ Gets the humidity and temperature """
-        self._dew_point = None
-        self._humidity = None
-        self._temperature = None
+        return_dict = measurements_dict.copy()
 
         if not self.pi.connected:  # Check if pigpiod is running
             self.logger.error('Could not connect to pigpiod. '
@@ -166,63 +155,53 @@ class DHT22Sensor(AbstractInput):
         for _ in range(4):
             self.measure_sensor()
             if self.temp_dew_point is not None:
-                self.temp_dew_point = convert_units(
-                    'dewpoint', 'celsius', self.convert_to_unit,
-                    self.temp_dew_point)
-                self.temp_temperature = convert_units(
-                    'temperature', 'celsius', self.convert_to_unit,
-                    self.temp_temperature)
-                return (self.temp_dew_point,
-                        self.temp_humidity,
-                        self.temp_temperature)  # success - no errors
+                if self.is_enabled(0):
+                    return_dict[0]['value'] = self.temp_temperature
+                if self.is_enabled(1):
+                    return_dict[1]['value'] = self.temp_humidity
+                if (self.is_enabled(2) and
+                        self.is_enabled(0) and
+                        self.is_enabled(1)):
+                    return_dict[2]['value'] = self.temp_dew_point
+                if (self.is_enabled(3) and
+                        self.is_enabled(0) and
+                        self.is_enabled(1)):
+                    return_dict[3]['value'] = self.temp_vpd
+                return return_dict  # success - no errors
             time.sleep(2)
 
         # Measurement failure, power cycle the sensor (if enabled)
         # Then try two more times to get a measurement
-        if self.power_output_id is not None:
+        if self.power_output_id is not None and self.running:
             self.stop_sensor()
             time.sleep(3)
             self.start_sensor()
             for _ in range(2):
                 self.measure_sensor()
                 if self.temp_dew_point is not None:
-                    self.temp_dew_point = convert_units(
-                        'dewpoint', 'celsius', self.convert_to_unit,
-                        self.temp_dew_point)
-                    self.temp_temperature = convert_units(
-                        'temperature', 'celsius', self.convert_to_unit,
-                        self.temp_temperature)
-                    return (self.temp_dew_point,
-                            self.temp_humidity,
-                            self.temp_temperature)  # success - no errors
+                    if self.is_enabled(0):
+                        return_dict[0]['value'] = self.temp_temperature
+                    if self.is_enabled(1):
+                        return_dict[1]['value'] = self.temp_humidity
+                    if (self.is_enabled(2) and
+                            self.is_enabled(0) and
+                            self.is_enabled(1)):
+                        return_dict[2]['value'] = self.temp_dew_point
+                    if (self.is_enabled(3) and
+                            self.is_enabled(0) and
+                            self.is_enabled(1)):
+                        return_dict[3]['value'] = self.temp_vpd
+                    return return_dict  # success - no errors
                 time.sleep(2)
 
         self.logger.debug("Could not acquire a measurement")
-        return None, None, None
-
-    def read(self):
-        """
-        Takes a reading from the DHT22 and updates the self.dew_point,
-        self._humidity, and self._temperature values
-
-        :returns: None on success or 1 on error
-        """
-        try:
-            (self._dew_point,
-             self._humidity,
-             self._temperature) = self.get_measurement()
-            if self._dew_point is not None:
-                return  # success - no errors
-        except Exception as e:
-            self.logger.exception(
-                "{cls} raised an exception when taking a reading: "
-                "{err}".format(cls=type(self).__name__, err=e))
-        return 1
+        return None
 
     def measure_sensor(self):
         self.temp_temperature = None
         self.temp_humidity = None
         self.temp_dew_point = None
+        self.temp_vpd = None
 
         initialized = False
 
@@ -240,14 +219,16 @@ class DHT22Sensor(AbstractInput):
 
         if initialized:
             try:
-                self.pi.write(self.gpio, pigpio.LOW)
+                self.pi.write(self.gpio, self.pigpio.LOW)
                 time.sleep(0.017)  # 17 ms
-                self.pi.set_mode(self.gpio, pigpio.INPUT)
+                self.pi.set_mode(self.gpio, self.pigpio.INPUT)
                 self.pi.set_watchdog(self.gpio, 200)
                 time.sleep(0.2)
                 if (self.temp_humidity is not None and
                         self.temp_temperature is not None):
-                    self.temp_dew_point = dewpoint(
+                    self.temp_dew_point = calculate_dewpoint(
+                        self.temp_temperature, self.temp_humidity)
+                    self.temp_vpd = calculate_vapor_pressure_deficit(
                         self.temp_temperature, self.temp_humidity)
             except Exception as e:
                 self.logger.exception(
@@ -267,14 +248,14 @@ class DHT22Sensor(AbstractInput):
         self.high_tick = 0
         self.bit = 40
         self.either_edge_cb = None
-        self.pi.set_pull_up_down(self.gpio, pigpio.PUD_OFF)
+        self.pi.set_pull_up_down(self.gpio, self.pigpio.PUD_OFF)
         self.pi.set_watchdog(self.gpio, 0)  # Kill any watchdogs
         self.register_callbacks()
 
     def register_callbacks(self):
         """ Monitors RISING_EDGE changes using callback """
         self.either_edge_cb = self.pi.callback(self.gpio,
-                                               pigpio.EITHER_EDGE,
+                                               self.pigpio.EITHER_EDGE,
                                                self.either_edge_callback)
 
     def either_edge_callback(self, gpio, level, tick):
@@ -286,12 +267,12 @@ class DHT22Sensor(AbstractInput):
         humidity low, temperature high, temperature low, checksum.
         """
         level_handlers = {
-            pigpio.FALLING_EDGE: self._edge_fall,
-            pigpio.RISING_EDGE: self._edge_rise,
-            pigpio.EITHER_EDGE: self._edge_either
+            self.pigpio.FALLING_EDGE: self._edge_fall,
+            self.pigpio.RISING_EDGE: self._edge_rise,
+            self.pigpio.EITHER_EDGE: self._edge_either
         }
         handler = level_handlers[level]
-        diff = pigpio.tickDiff(self.high_tick, tick)
+        diff = self.pigpio.tickDiff(self.high_tick, tick)
         handler(tick, diff)
 
     def _edge_rise(self, tick, diff):

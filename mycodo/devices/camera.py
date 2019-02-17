@@ -6,13 +6,13 @@ import time
 import os
 import picamera
 
-from mycodo.config import INSTALL_DIRECTORY
+from mycodo.config import PATH_CAMERAS
 from mycodo.databases.models import Camera
+from mycodo.mycodo_client import DaemonControl
 from mycodo.utils.database import db_retrieve_table_daemon
 from mycodo.utils.system_pi import assure_path_exists
 from mycodo.utils.system_pi import cmd_output
 from mycodo.utils.system_pi import set_user_grp
-from mycodo.mycodo_client import DaemonControl
 
 logger = logging.getLogger('mycodo.devices.picamera')
 
@@ -33,18 +33,23 @@ def camera_record(record_type, unique_id, duration_sec=None, tmp_filename=None):
     daemon_control = None
     settings = db_retrieve_table_daemon(Camera, unique_id=unique_id)
     timestamp = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-    root_path = os.path.abspath(os.path.join(INSTALL_DIRECTORY, 'cameras'))
-    assure_path_exists(root_path)
+    assure_path_exists(PATH_CAMERAS)
     camera_path = assure_path_exists(
-        os.path.join(root_path, '{uid}'.format(uid=settings.unique_id)))
+        os.path.join(PATH_CAMERAS, '{uid}'.format(uid=settings.unique_id)))
     if record_type == 'photo':
-        save_path = assure_path_exists(os.path.join(camera_path, 'still'))
+        if settings.path_still != '':
+            save_path = settings.path_still
+        else:
+            save_path = assure_path_exists(os.path.join(camera_path, 'still'))
         filename = 'Still-{cam_id}-{cam}-{ts}.jpg'.format(
             cam_id=settings.id,
             cam=settings.name,
             ts=timestamp).replace(" ", "_")
     elif record_type == 'timelapse':
-        save_path = assure_path_exists(os.path.join(camera_path, 'timelapse'))
+        if settings.path_timelapse != '':
+            save_path = settings.path_timelapse
+        else:
+            save_path = assure_path_exists(os.path.join(camera_path, 'timelapse'))
         start = datetime.datetime.fromtimestamp(
             settings.timelapse_start_time).strftime("%Y-%m-%d_%H-%M-%S")
         filename = 'Timelapse-{cam_id}-{cam}-{st}-img-{cn:05d}.jpg'.format(
@@ -53,18 +58,22 @@ def camera_record(record_type, unique_id, duration_sec=None, tmp_filename=None):
             st=start,
             cn=settings.timelapse_capture_number).replace(" ", "_")
     elif record_type == 'video':
-        save_path = assure_path_exists(os.path.join(camera_path, 'video'))
+        if settings.path_video != '':
+            save_path = settings.path_video
+        else:
+            save_path = assure_path_exists(os.path.join(camera_path, 'video'))
         filename = 'Video-{cam}-{ts}.h264'.format(
             cam=settings.name,
             ts=timestamp).replace(" ", "_")
     else:
         return
 
+    assure_path_exists(save_path)
+
     if tmp_filename:
         filename = tmp_filename
 
     path_file = os.path.join(save_path, filename)
-
 
     # Turn on output, if configured
     if settings.output_id:
@@ -76,7 +85,6 @@ def camera_record(record_type, unique_id, duration_sec=None, tmp_filename=None):
     # capturing an image.
     if settings.output_duration:
         time.sleep(settings.output_duration)
-
 
     if settings.library == 'picamera':
         # Try 5 times to access the pi camera (in case another process is accessing it)

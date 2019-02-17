@@ -26,9 +26,9 @@ runSelfUpgrade() {
   NOW=$(date +"%Y-%m-%d_%H-%M-%S")
   CURRENT_VERSION=$(${INSTALL_DIRECTORY}/Mycodo/env/bin/python3 ${INSTALL_DIRECTORY}/Mycodo/mycodo/utils/github_release_info.py -c 2>&1)
   BACKUP_DIR="/var/Mycodo-backups/Mycodo-backup-${NOW}-${CURRENT_VERSION}"
-  UPDATE_VERSION=$(${INSTALL_DIRECTORY}/Mycodo/env/bin/python3 ${INSTALL_DIRECTORY}/Mycodo/mycodo/utils/github_release_info.py -m 6 -v 2>&1)
+  UPDATE_VERSION=$(${INSTALL_DIRECTORY}/Mycodo/env/bin/python3 ${INSTALL_DIRECTORY}/Mycodo/mycodo/utils/github_release_info.py -m 7 -v 2>&1)
   MYCODO_NEW_TMP_DIR="/tmp/Mycodo-${UPDATE_VERSION}"
-  UPDATE_URL=$(${INSTALL_DIRECTORY}/Mycodo/env/bin/python3 ${INSTALL_DIRECTORY}/Mycodo/mycodo/utils/github_release_info.py -m 6 2>&1)
+  UPDATE_URL=$(${INSTALL_DIRECTORY}/Mycodo/env/bin/python3 ${INSTALL_DIRECTORY}/Mycodo/mycodo/utils/github_release_info.py -m 7 2>&1)
   TARBALL_FILE="mycodo-${UPDATE_VERSION}"
 
   printf "\n"
@@ -151,6 +151,15 @@ runSelfUpgrade() {
     printf "Copying SSL certificates..."
     if ! cp -R ${INSTALL_DIRECTORY}/Mycodo/mycodo/mycodo_flask/ssl_certs ${MYCODO_NEW_TMP_DIR}/mycodo/mycodo_flask/ssl_certs ; then
       printf "Failed: Error while trying to copy SSL certificates."
+      error_found
+    fi
+    printf "Done.\n"
+  fi
+
+  if [ -d ${INSTALL_DIRECTORY}/Mycodo/mycodo/inputs/custom_inputs ] ; then
+    printf "Copying mycodo/inputs/custom_inputs..."
+    if ! cp -R ${INSTALL_DIRECTORY}/Mycodo/mycodo/inputs/custom_inputs ${MYCODO_NEW_TMP_DIR}/mycodo/inputs/custom_inputs ; then
+      printf "Failed: Error while trying to copy mycodo/inputs/custom_inputs"
       error_found
     fi
     printf "Done.\n"

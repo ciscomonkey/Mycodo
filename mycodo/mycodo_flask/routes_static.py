@@ -3,6 +3,7 @@ import logging
 import socket
 import traceback
 
+import flask_login
 from flask import current_app
 from flask import redirect
 from flask import render_template
@@ -13,6 +14,7 @@ from flask.blueprints import Blueprint
 
 from mycodo.config import MYCODO_VERSION
 from mycodo.config import THEMES_DARK
+from mycodo.config_translations import TRANSLATIONS
 from mycodo.databases.models import Misc
 from mycodo.mycodo_client import DaemonControl
 from mycodo.mycodo_flask.routes_authentication import admin_exists
@@ -41,20 +43,22 @@ def inject_variables():
         control = DaemonControl()
         daemon_status = control.daemon_status()
     except Exception as e:
-        logger.error("URL for 'inject_variables' raised and error: "
+        logger.debug("URL for 'inject_variables' raised and error: "
                      "{err}".format(err=e))
         daemon_status = '0'
 
     misc = Misc.query.first()
-    return dict(daemon_status=daemon_status,
-                dark_themes=THEMES_DARK,
-                mycodo_version=MYCODO_VERSION,
-                host=socket.gethostname(),
-                hide_alert_success=misc.hide_alert_success,
+    return dict(dark_themes=THEMES_DARK,
+                daemon_status=daemon_status,
                 hide_alert_info=misc.hide_alert_info,
+                hide_alert_success=misc.hide_alert_success,
                 hide_alert_warning=misc.hide_alert_warning,
                 hide_tooltips=misc.hide_tooltips,
-                upgrade_available = misc.mycodo_upgrade_available)
+                host=socket.gethostname(),
+                mycodo_version=MYCODO_VERSION,
+                dict_translation=TRANSLATIONS,
+                upgrade_available=misc.mycodo_upgrade_available,
+                username=flask_login.current_user.name)
 
 
 @blueprint.route('/robots.txt')

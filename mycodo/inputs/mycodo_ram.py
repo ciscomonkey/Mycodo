@@ -2,76 +2,57 @@
 import logging
 import resource
 
+from mycodo.inputs.base_input import AbstractInput
 from mycodo.mycodo_client import DaemonControl
-from .base_input import AbstractInput
+
+# Measurements
+measurements_dict = {
+    0: {
+        'measurement': 'disk_space',
+        'unit': 'MB'
+    }
+}
+
+# Input information
+INPUT_INFORMATION = {
+    'input_name': 'Mycodo RAM',
+    'input_name_unique': 'MYCODO_RAM',
+    'input_manufacturer': 'Mycodo',
+    'measurements_name': 'Size RAM in Use',
+    'measurements_dict': measurements_dict,
+
+    'options_enabled': [
+        'period'
+    ],
+    'options_disabled': ['interface'],
+
+    'interfaces': ['Mycodo']
+}
 
 
-class MycodoRam(AbstractInput):
+class InputModule(AbstractInput):
     """
     A sensor support class that measures ram used by the Mycodo daemon
 
     """
     def __init__(self, input_dev, testing=False):
-        super(MycodoRam, self).__init__()
+        super(InputModule, self).__init__()
         self.logger = logging.getLogger("mycodo.inputs.mycodo_ram")
         self._disk_space = None
 
         if not testing:
             self.logger = logging.getLogger(
-                "mycodo.inputs.mycodo_ram_{id}".format(id=input_dev.id))
+                "mycodo.mycodo_ram_{id}".format(id=input_dev.unique_id.split('-')[0]))
+
             self.control = DaemonControl()
-
-    def __repr__(self):
-        """  Representation of object """
-        return "<{cls}(disk_space={disk_space})>".format(
-                cls=type(self).__name__,
-                disk_space="{0:.2f}".format(self._disk_space))
-
-    def __str__(self):
-        """ Return measurement information """
-        return "Ram: {disk_space}".format(
-                disk_space="{0:.2f}".format(self._disk_space))
-
-    def __iter__(self):  # must return an iterator
-        """ SensorClass iterates through live measurement readings """
-        return self
-
-    def next(self):
-        """ Get next measurement reading """
-        if self.read():  # raised an error
-            raise StopIteration  # required
-        return dict(disk_space=float('{0:.2f}'.format(self._disk_space)))
-
-    @property
-    def disk_space(self):
-        """ Mycodo daemon disk_space in MegaBytes """
-        if self._disk_space is None:  # update if needed
-            self.read()
-        return self._disk_space
 
     def get_measurement(self):
         """ Gets the measurement in units by reading resource """
-        self._disk_space = None
-        disk_space = None
+        return_dict = measurements_dict.copy()
+
         try:
-            disk_space = resource.getrusage(
+            return_dict[0]['value'] = resource.getrusage(
                 resource.RUSAGE_SELF).ru_maxrss / float(1000)
+            return return_dict
         except Exception:
             pass
-        return disk_space
-
-    def read(self):
-        """
-        Takes a ram usage reading from resource and updates the self._disk_space
-
-        :returns: None on success or 1 on error
-        """
-        try:
-            self._disk_space = self.get_measurement()
-            if self._disk_space is not None:
-                return  # success - no errors
-        except Exception as e:
-            self.logger.exception(
-                "{cls} raised an exception when taking a reading: "
-                "{err}".format(cls=type(self).__name__, err=e))
-        return 1

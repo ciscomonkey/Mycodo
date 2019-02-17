@@ -6,69 +6,133 @@ import pwd
 import socket
 import subprocess
 import time
+import traceback
+from collections import OrderedDict
 
 import os
 
 from mycodo.config import INSTALL_DIRECTORY
+from mycodo.config_devices_units import MEASUREMENTS
 from mycodo.config_devices_units import UNITS
-from mycodo.mycodo_flask.utils.utils_general import use_unit_generate
+from mycodo.config_devices_units import UNIT_CONVERSIONS
+from mycodo.databases.models import DeviceMeasurements
+from mycodo.utils.database import db_retrieve_table_daemon
 
 logger = logging.getLogger("mycodo.system_pi")
 
 
-def add_custom_measurements(inputs, maths, measurement_units):
+def add_custom_units(units):
+    return_units = UNITS.copy()
+
+    for each_unit in units:
+        return_units.update(
+            {each_unit.name_safe: {
+                'unit': each_unit.unit,
+                'name': each_unit.name}})
+
+    # Sort dictionary by keys, ignoring case
+    sorted_keys = sorted(list(return_units), key=lambda s: s.casefold())
+    sorted_dict_units = OrderedDict()
+    for each_key in sorted_keys:
+        sorted_dict_units[each_key] = return_units[each_key]
+
+    return sorted_dict_units
+
+
+def test_python_execute(code_string):
+    try:
+        exec(code_string, globals())
+    except Exception:
+        return 1, traceback.format_exc()
+    else:
+        return 0, None
+
+
+def dpkg_package_exists(package_name):
+    cmd = 'dpkg -l {}'.format(package_name)
+    _, _, stat = cmd_output(cmd)
+    if not stat:
+        return True
+
+
+def return_measurement_info(device_measurement, conversion):
+    try:
+        if (device_measurement and
+                device_measurement.conversion_id and
+                conversion):
+            unit = conversion.convert_unit_to
+            measurement = None
+        elif (device_measurement and
+                hasattr(device_measurement, 'rescaled_unit') and
+                hasattr(device_measurement, 'rescaled_measurement') and
+                device_measurement.rescaled_unit and
+                device_measurement.rescaled_measurement):
+            unit = device_measurement.rescaled_unit
+            measurement = device_measurement.rescaled_measurement
+        else:
+            unit = device_measurement.unit
+            measurement = device_measurement.measurement
+        return device_measurement.channel, unit, measurement
+    except Exception:
+        logger.exception("{}, {}".format(device_measurement, conversion))
+        return None, None, None
+
+
+def add_custom_measurements(measurements):
     """
-    Returns the measurement dictionary appended with
-    input, ADC, and command measurements/units
+    Returns the measurement dictionary appended with custom measurements/units
     """
-    return_measurements = measurement_units
+    return_measurements = MEASUREMENTS
 
-    use_unit = use_unit_generate(inputs)
-
-    for each_input in inputs:
-        # Add command measurements/units to measurements dictionary
-        if (each_input.cmd_measurement and
-                each_input.cmd_measurement_units and
-                each_input.cmd_measurement not in measurement_units):
+    for each_measure in measurements:
+        if each_measure.name_safe not in return_measurements:
             return_measurements.update(
-                {each_input.cmd_measurement: {
-                    'meas': each_input.cmd_measurement,
-                    'unit': each_input.cmd_measurement_units,
-                    'name': each_input.cmd_measurement}})
+                {each_measure.name_safe: {
+                    'meas': each_measure.name_safe,
+                    'units': each_measure.units.split(','),
+                    'name': each_measure.name}})
+        else:
+            for each_unit in each_measure.units.split(','):
+                if each_unit not in return_measurements[each_measure.name_safe]['units']:
+                    return_measurements[each_measure.name_safe]['units'].append(each_unit)
 
-        # Add ADC measurements/units to measurements dictionary
-        elif (each_input.adc_measure and
-                each_input.adc_measure_units and
-                each_input.adc_measure not in measurement_units):
-            return_measurements.update(
-                {each_input.adc_measure: {
-                    'meas': each_input.adc_measure,
-                    'unit': each_input.adc_measure_units,
-                    'name': each_input.adc_measure}})
+    # Sort dictionary by keys
+    sorted_keys = sorted(list(return_measurements), key=lambda s: s.casefold())
+    sorted_dict_measurements = OrderedDict()
+    for each_key in sorted_keys:
+        sorted_dict_measurements[each_key] = return_measurements[each_key]
 
-        # Add converted measurements/units to measurements dictionary
-        elif each_input.unique_id in use_unit:
-            for each_measure in use_unit[each_input.unique_id]:
-                if (use_unit[each_input.unique_id][each_measure] is not None and
-                        use_unit[each_input.unique_id][each_measure] in UNITS):
-                    return_measurements.update(
-                        {use_unit[each_input.unique_id][each_measure]: {
-                            'meas': use_unit[each_input.unique_id][each_measure],
-                            'unit': UNITS[use_unit[each_input.unique_id][each_measure]]['unit'],
-                            'name': UNITS[use_unit[each_input.unique_id][each_measure]]['name']}})
+    return sorted_dict_measurements
 
-    for each_math in maths:
-        # Add Math measurements/units to measurements dictionary
-        if (each_math.measure and
-                each_math.measure_units and
-                each_math.measure not in measurement_units):
-            return_measurements.update(
-                {each_math.measure: {
-                    'meas': each_math.measure,
-                    'unit': each_math.measure_units,
-                    'name': each_math.measure}})
 
-    return return_measurements
+def all_conversions(conversions):
+    conversions_combined = OrderedDict()
+    for each_conversion in conversions:
+        convert_str = '{fr}_to_{to}'.format(
+            fr=each_conversion.convert_unit_from,
+            to=each_conversion.convert_unit_to)
+        equation_str = each_conversion.equation
+        if convert_str not in UNIT_CONVERSIONS:
+            conversions_combined[convert_str] = equation_str
+
+    # Sort dictionary by keys
+    sorted_keys = sorted(list(conversions_combined), key=lambda s: s.casefold())
+    sorted_dict_conversions = OrderedDict()
+    for each_key in sorted_keys:
+        sorted_dict_conversions[each_key] = conversions_combined[each_key]
+
+    return sorted_dict_conversions
+
+
+def get_measurement(measurement_id):
+    """ Find measurement """
+    device_measurement = db_retrieve_table_daemon(
+        DeviceMeasurements).filter(
+        DeviceMeasurements.unique_id == measurement_id).first()
+    if device_measurement:
+        return device_measurement
+    else:
+        return None
 
 
 def time_between_range(start_time, end_time):
@@ -110,17 +174,18 @@ def epoch_of_next_time(time_str):
         return None
 
 
-def cmd_output(command, su_mycodo=False, stdout_pipe=True):
+def cmd_output(command, stdout_pipe=True):
     """
     Executed command and returns a list of lines from the output
     """
-    full_cmd = '{}'.format(command)
-    if su_mycodo:  # TODO: Remove su as I don't beleive it works
-        full_cmd = 'su mycodo && {}'.format(command)
     if stdout_pipe:
-        cmd = subprocess.Popen(full_cmd, stdout=subprocess.PIPE, shell=True)
+        cmd = subprocess.Popen(command,
+                               stdout=subprocess.PIPE,
+                               shell=True)
     else:
-        cmd = subprocess.Popen(full_cmd, shell=True)
+        cmd = subprocess.Popen(command,
+                               shell=True)
+
     cmd_out, cmd_err = cmd.communicate()
     cmd_status = cmd.wait()
     return cmd_out, cmd_err, cmd_status
@@ -215,18 +280,19 @@ def get_directory_free_space(path):
     return statvfs.f_frsize * statvfs.f_bavail
 
 
-def get_directory_size(start_path='.', exclude=[]):
+def get_directory_size(start_path='.', exclude=None):
     """
     Returns the size of a directory
     A list of directories may be excluded
     """
     total_size = 0
-    for dirpath, dirnames, filenames in os.walk(start_path):
+    for dirpath, _, filenames in os.walk(start_path):
         skip_dir = False
-        for each_exclusion in exclude:
-            test_exclude = os.path.join(start_path, each_exclusion)
-            if dirpath.startswith(test_exclude + '/'):
-                skip_dir = True
+        if exclude:
+            for each_exclusion in exclude:
+                test_exclude = os.path.join(start_path, each_exclusion)
+                if dirpath.startswith(test_exclude + '/'):
+                    skip_dir = True
         if not skip_dir:
             for f in filenames:
                 fp = os.path.join(dirpath, f)
@@ -255,14 +321,14 @@ def celsius_to_kelvin(celsius):
 
 def csv_to_list_of_str(str_csv):
     """ return a list of strings from a string of csv strings """
+    list_str = []
     if str_csv:
-        list_str = []
         for x in str_csv.split(','):
             try:
                 list_str.append(x)
             except:
                 pass
-        return list_str
+    return list_str
 
 
 def list_to_csv(display_order):

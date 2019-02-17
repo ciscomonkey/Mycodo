@@ -9,10 +9,35 @@ from wtforms import DecimalField
 from wtforms import FileField
 from wtforms import HiddenField
 from wtforms import IntegerField
+from wtforms import SelectField
 from wtforms import StringField
 from wtforms import SubmitField
 from wtforms import validators
 from wtforms import widgets
+from wtforms.widgets.html5 import NumberInput
+
+from mycodo.config_translations import TRANSLATIONS
+
+
+#
+# Energy Usage
+#
+
+class EnergyUsageAdd(FlaskForm):
+    energy_usage_select = SelectField(
+        '{}: {}'.format(lazy_gettext('Measurement'), lazy_gettext('Amp')))
+    energy_usage_add = SubmitField(TRANSLATIONS['add']['title'])
+
+
+class EnergyUsageMod(FlaskForm):
+    energy_usage_id = StringField('Energy Usage ID', widget=widgets.HiddenInput())
+    name = StringField(TRANSLATIONS['name']['title'])
+    selection_device_measure_ids = StringField(
+        '{}: {}'.format(lazy_gettext('Measurement'), lazy_gettext('Amp')))
+    energy_usage_date_range = StringField(lazy_gettext('Time Range MM/DD/YYYY HH:MM'))
+    energy_usage_range_calc = SubmitField(TRANSLATIONS['calculate']['title'])
+    energy_usage_mod = SubmitField(TRANSLATIONS['save']['title'])
+    energy_usage_delete = SubmitField(TRANSLATIONS['delete']['title'])
 
 
 #
@@ -31,14 +56,16 @@ class Camera(FlaskForm):
         validators=[validators.NumberRange(
             min=0,
             message=lazy_gettext('Photo Interval must be a positive value')
-        )]
+        )],
+        widget=NumberInput(step='any')
     )
     timelapse_runtime_sec = DecimalField(
         lazy_gettext('Run Time (seconds)'),
         validators=[validators.NumberRange(
             min=0,
             message=lazy_gettext('Total Run Time must be a positive value')
-        )]
+        )],
+        widget=NumberInput(step='any')
     )
     start_stream = SubmitField(lazy_gettext('Start Stream'))
     stop_stream = SubmitField(lazy_gettext('Stop Stream'))
@@ -60,24 +87,26 @@ class DaemonControl(FlaskForm):
 
 class ExportMeasurements(FlaskForm):
     measurement = StringField(lazy_gettext('Measurement to Export'))
-    date_range = StringField(lazy_gettext('Time Range DD/MM/YYYY HH:MM'))
+    date_range = StringField(lazy_gettext('Time Range MM/DD/YYYY HH:MM'))
     export_data_csv = SubmitField(lazy_gettext('Export Data as CSV'))
+
 
 class ExportSettings(FlaskForm):
     export_settings_zip = SubmitField(lazy_gettext('Export Settings'))
 
+
 class ImportSettings(FlaskForm):
-    settings_import_file = FileField('Upload')
+    settings_import_file = FileField(TRANSLATIONS['upload']['title'])
     settings_import_upload = SubmitField(lazy_gettext('Import Settings'))
+
 
 class ExportInfluxdb(FlaskForm):
     export_influxdb_zip = SubmitField(lazy_gettext('Export Influxdb'))
 
+
 class ImportInfluxdb(FlaskForm):
-    influxdb_import_file = FileField('Upload')
+    influxdb_import_file = FileField(TRANSLATIONS['upload']['title'])
     influxdb_import_upload = SubmitField(lazy_gettext('Import Influxdb'))
-
-
 
 
 #
@@ -91,9 +120,10 @@ class LogView(FlaskForm):
         validators=[validators.NumberRange(
             min=1,
             message=lazy_gettext('Number of lines should be greater than 0')
-        )]
+        )],
+        widget=NumberInput()
     )
-    loglogin = SubmitField(lazy_gettext('Login'))
+    loglogin = SubmitField(lazy_gettext(TRANSLATIONS['login']['title']))
     loghttp_access = SubmitField(lazy_gettext('Web Access'))
     loghttp_error = SubmitField(lazy_gettext('Web Error'))
     logdaemon = SubmitField(lazy_gettext('Daemon'))
@@ -102,6 +132,7 @@ class LogView(FlaskForm):
     logkeepup = SubmitField(lazy_gettext('KeepUp'))
     logupgrade = SubmitField(lazy_gettext('Upgrade'))
     logrestore = SubmitField(lazy_gettext('Restore'))
+    log_pid_settings = SubmitField(lazy_gettext('PID Settings'))
 
 
 #
@@ -110,7 +141,8 @@ class LogView(FlaskForm):
 
 class Upgrade(FlaskForm):
     upgrade = SubmitField(lazy_gettext('Upgrade Mycodo'))
-    upgrade_next_major_version = SubmitField(lazy_gettext('Upgrade Mycodo to Next Major Version'))
+    upgrade_next_major_version = SubmitField(lazy_gettext(
+        'Upgrade Mycodo to Next Major Version'))
 
 
 #

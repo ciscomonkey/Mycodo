@@ -14,6 +14,8 @@ from flask import request
 from flask import url_for
 from flask_babel import gettext
 
+from mycodo.config import METHOD_INFO
+from mycodo.config_translations import TRANSLATIONS
 from mycodo.databases.models import DisplayOrder
 from mycodo.databases.models import Method
 from mycodo.databases.models import MethodData
@@ -183,6 +185,7 @@ def method_list():
     return render_template('pages/method-list.html',
                            method=method,
                            method_all=method_all,
+                           method_info=METHOD_INFO,
                            form_create_method=form_create_method)
 
 
@@ -207,6 +210,7 @@ def method_builder(method_id):
     # Used in software tests to verify function is executing as admin
     if method_id == '-1':
         return 'admin logged in'
+
     # Create new method
     elif method_id == '0':
         form_fail = utils_method.method_create(form_create_method)
@@ -237,7 +241,7 @@ def method_builder(method_id):
             MethodData.amplitude != None)
         bezier_method_data = MethodData.query.filter(
             MethodData.x0 != None)
-        if display_order is not None:
+        if display_order:
             last_setpoint_method = setpoint_method_data.filter(
                 MethodData.unique_id == display_order[-1]).first()
             last_sine_method = sine_method_data.filter(
@@ -301,7 +305,7 @@ def method_builder(method_id):
 def method_delete(method_id):
     """Delete a method"""
     action = '{action} {controller}'.format(
-        action=gettext("Delete"),
+        action=TRANSLATIONS['delete']['title'],
         controller=gettext("Method"))
 
     if not utils_general.user_has_permission('edit_settings'):

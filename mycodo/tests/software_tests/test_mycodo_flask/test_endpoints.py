@@ -3,12 +3,13 @@
 import mock
 
 from mycodo.config import MATH_INFO
-from mycodo.config_devices_units import DEVICE_INFO
 from mycodo.databases.models import Input
 from mycodo.databases.models import Math
 from mycodo.databases.models import User
+from mycodo.mycodo_flask.utils.utils_general import generate_form_input_list
 from mycodo.tests.software_tests.conftest import login_user
 from mycodo.tests.software_tests.factories import UserFactory
+from mycodo.utils.inputs import parse_input_information
 
 
 # ----------------------
@@ -53,7 +54,7 @@ def test_routes_when_not_logged_in(testapp):
         'admin/backup',
         'admin/statistics',
         'admin/upgrade',
-        'async/0/0/0/0',
+        'async/0/0/0/0/0',
         'camera',
         'dl/0/0',
         'data',
@@ -65,7 +66,7 @@ def test_routes_when_not_logged_in(testapp):
         'graph-async',
         'help',
         'info',
-        'last/0/0/0',
+        'last/0/0/0/0',
         'lcd',
         'live',
         'logout',
@@ -74,12 +75,14 @@ def test_routes_when_not_logged_in(testapp):
         'method-build/0',
         'method-data/0',
         'method-delete/0',
-        'past/0/0/0',
+        'past/0/0/0/0',
         'output',
         'remote/setup',
         'settings/alerts',
         'settings/camera',
         'settings/general',
+        'settings/input',
+        'settings/measurement',
         'settings/users',
         'systemctl/restart',
         'systemctl/shutdown',
@@ -109,6 +112,8 @@ def test_routes_logged_in_as_admin(_, testapp):
         ('settings/alerts', '<!-- Route: /settings/alerts -->'),
         ('settings/camera', '<!-- Route: /settings/camera -->'),
         ('settings/general', '<!-- Route: /settings/general -->'),
+        ('settings/input', '<!-- Route: /settings/input -->'),
+        ('settings/measurement', '<!-- Route: /settings/measurement -->'),
         ('settings/users', '<!-- Route: /settings/users -->'),
         ('calibration', '<!-- Route: /calibration -->'),
         ('camera', '<!-- Route: /camera -->'),
@@ -124,8 +129,12 @@ def test_routes_logged_in_as_admin(_, testapp):
         ('logview', '<!-- Route: /logview -->'),
         ('method', '<!-- Route: /method -->'),
         ('method-build/-1', 'admin logged in'),
+        ('notes', '<!-- Route: /notes -->'),
+        ('note_edit/0', 'admin logged in'),
         ('output', '<!-- Route: /output -->'),
         ('remote/setup', '<!-- Route: /remote/setup -->'),
+        ('setup_atlas_ph', '<!-- Route: /setup_atlas_ph -->'),
+        ('setup_ds_resolution', '<!-- Route: /setup_ds_resolution -->'),
         ('usage', '<!-- Route: /usage -->'),
         ('usage_reports', '<!-- Route: /usage_reports -->')
     ]
@@ -142,11 +151,25 @@ def test_add_all_data_devices_logged_in_as_admin(_, testapp):
 
     # Add All Inputs
     input_count = 0
-    for each_input, each_data in DEVICE_INFO.items():
+
+    dict_inputs = parse_input_information()
+    list_inputs_sorted = generate_form_input_list(dict_inputs)
+
+    choices_input = []
+    for each_input in list_inputs_sorted:
+        if 'interfaces' not in dict_inputs[each_input]:
+            choices_input.append('{inp},'.format(inp=each_input))
+        else:
+            for each_interface in dict_inputs[each_input]['interfaces']:
+                choices_input.append('{inp},{int}'.format(inp=each_input, int=each_interface))
+
+    for each_input in choices_input:
+        choice_name = each_input.split(',')[0]
+        print("Testing {}".format(each_input))
         response = add_data(testapp, data_type='input', input_type=each_input)
 
         # Verify success message flashed
-        assert "{} Input with ID".format(each_input) in response
+        assert "{} Input with ID".format(choice_name) in response
         assert "successfully added" in response
 
         # Verify data was entered into the database
@@ -154,11 +177,11 @@ def test_add_all_data_devices_logged_in_as_admin(_, testapp):
         assert Input.query.count() == input_count, "Number of Inputs doesn't match: In DB {}, Should be: {}".format(Input.query.count(), input_count)
 
         input_dev = Input.query.filter(Input.id == input_count).first()
-        assert each_data['name'] in input_dev.name, "Input name doesn't match: {}".format(each_input)
+        assert dict_inputs[choice_name]['input_name'] in input_dev.name, "Input name doesn't match: {}".format(choice_name)
 
     # Add All Maths
     math_count = 0
-    for each_math, each_data in MATH_INFO.items():
+    for each_math in MATH_INFO.keys():
         response = add_data(testapp, data_type='math', input_type=each_math)
 
         # Verify success message flashed
@@ -168,10 +191,10 @@ def test_add_all_data_devices_logged_in_as_admin(_, testapp):
         # Verify data was entered into the database
         math_count += 1
         actual_count = Math.query.count()
-        assert actual_count == math_count, "Number of Maths doesn't match: In DB {}, Should be: {}".format(actual_count, math_count)
+        assert actual_count == math_count, "Number of Maths don't match: In DB {}, Should be: {}".format(actual_count, math_count)
 
         math_dev = Math.query.filter(Math.id == math_count).first()
-        assert each_data['name'] in math_dev.name, "Math name doesn't match: {}".format(each_math)
+        assert each_math in math_dev.math_type, "Math type doesn't match: {}".format(each_math)
 
 
 # ---------------------------
@@ -193,7 +216,9 @@ def test_routes_logged_in_as_guest(_, testapp):
         ('remote/setup', '<!-- Route: /live -->'),
         ('settings/alerts', '<!-- Route: /live -->'),
         ('settings/camera', '<!-- Route: /live -->'),
+        ('settings/diagnostic', '<!-- Route: /live -->'),
         ('settings/general', '<!-- Route: /live -->'),
+        ('settings/measurement', '<!-- Route: /live -->'),
         ('settings/users', '<!-- Route: /live -->'),
         ('systemctl/restart', '<!-- Route: /live -->'),
         ('systemctl/shutdown', '<!-- Route: /live -->')
@@ -221,11 +246,11 @@ def add_data(testapp, data_type='input', input_type='RPi'):
     if data_type == 'input':
         form = testapp.get('/data').maybe_follow().forms['new_input_form']
         form.select(name='input_type', value=input_type)
-        response = form.submit(name='input_add', value='Add Input').maybe_follow()
+        response = form.submit(name='input_add', value='Add').maybe_follow()
     elif data_type == 'math':
         form = testapp.get('/data').maybe_follow().forms['new_math_form']
         form.select(name='math_type', value=input_type)
-        response = form.submit(name='math_add', value='Add Math').maybe_follow()
+        response = form.submit(name='math_add', value='Add').maybe_follow()
     # response.showbrowser()
     return response
 
@@ -243,15 +268,16 @@ def sees_navbar(testapp):
         'Dash',
         'Data',
         'Export',
-        'Functions',
-        'LCDs',
+        'Function',
+        'LCD',
         'Live',
         'Logout',
         'Mycodo Logs',
-        'Methods',
-        'Outputs',
-        'Output Usage',
-        'Output Usage Reports',
+        'Method',
+        'Note',
+        'Output',
+        'Energy Usage',
+        'Energy Usage Reports',
         'Remote Admin',
         'System Information',
         'Upgrade'

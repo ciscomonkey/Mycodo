@@ -1,9 +1,9 @@
 {% extends "layout-settings.html" %}
 {% set active_page = "settings" %}
 {% set active_settings = "users" %}
-{% set help_page = ["users", _('User Settings')] %}
+{% set help_page = ["users", dict_translation['settings']['title'] + ': ' + dict_translation['user']['title']] %}
 
-{% block title %} - {{_('User Settings')}}{% endblock %}
+{% block title %} - {{dict_translation['settings']['title'] + ': ' + dict_translation['user']['title']}}{% endblock %}
 
 {% block settings %}
   <!-- Route: /settings/users -->
@@ -14,33 +14,33 @@
   <form class="form-horizontal" method="post" action="/settings/users">
   {{form_add_user.hidden_tag()}}
 
-  <div class="row small-gutters">
+  <div class="row align-items-end small-gutters">
 
-    <div class="col-xs-6 col-sm-3 col-md-3">
+    <div class="col-6 col-sm-3 col-md-3">
       {{form_add_user.user_name.label(class_='control-label')}}
       <div>
         {{form_add_user.user_name(class_='form-control')}}
       </div>
     </div>
-    <div class="col-xs-6 col-sm-3 col-md-3">
+    <div class="col-6 col-sm-3 col-md-3">
       {{form_add_user.email.label(class_='control-label')}}
       <div>
         {{form_add_user.email(class_='form-control')}}
       </div>
     </div>
-    <div class="col-xs-6 col-sm-3 col-md-3">
+    <div class="col-6 col-sm-3 col-md-3">
       {{form_add_user.password_new.label(class_='control-label')}}
       <div>
         {{form_add_user.password_new(class_='form-control')}}
       </div>
     </div>
-    <div class="col-xs-6 col-sm-3 col-md-3">
+    <div class="col-6 col-sm-3 col-md-3">
       {{form_add_user.password_repeat.label(class_='control-label')}}
       <div>
         {{form_add_user.password_repeat(class_='form-control')}}
       </div>
     </div>
-    <div class="col-xs-4 col-sm-3 col-md-3">
+    <div class="col-4 col-sm-3 col-md-3">
       {{form_add_user.addRole.label(class_='control-label')}}
       <div>
         <select class="form-control" id="addRole" name="addRole">
@@ -51,7 +51,7 @@
         </select>
       </div>
     </div>
-    <div class="col-xs-4 col-sm-3 col-md-3">
+    <div class="col-4 col-sm-3 col-md-3">
     {{form_add_user.theme.label(class_='control-label')}}
       <div>
         <select class="form-control" id="theme" name="theme">
@@ -61,11 +61,8 @@
         </select>
       </div>
     </div>
-    <div class="col-xs-4 col-sm-3 col-md-3">
-      <label class="control-label">&nbsp;</label>
-      <div>
-        {{form_add_user.add_user(class_='btn btn-primary')}}
-      </div>
+    <div class="col-4 col-sm-3 col-md-3">
+      {{form_add_user.add_user(class_='btn btn-primary')}}
     </div>
   </div>
 
@@ -129,7 +126,7 @@
   <form method="post" action="/settings/users">
   {{form_user_roles.csrf_token}}
 
-  <div class="row small-gutters">
+  <div class="row align-items-end small-gutters">
     <div class="col-auto">
       {{form_user_roles.name.label(class_='control-label')}}
       <div>
@@ -137,10 +134,7 @@
       </div>
     </div>
     <div class="col-auto">
-      <label class="control-label">&nbsp;</label>
-      <div>
-        {{form_user_roles.add_role(class_='btn btn-primary')}}
-      </div>
+      {{form_user_roles.add_role(class_='btn btn-primary')}}
     </div>
   </div>
 
@@ -181,7 +175,7 @@
 
     <div style="clear: both; padding: 1em 0;"></div>
 
-    {% for each_role in user_roles if each_role.id > 4 %}
+    {% for each_role in user_roles if each_role.id > 1 %}
 
       <form method="post" action="/settings/users">
       {{form_user_roles.csrf_token}}

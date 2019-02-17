@@ -13,6 +13,9 @@ from wtforms import SubmitField
 from wtforms import validators
 from wtforms import widgets
 from wtforms.validators import DataRequired
+from wtforms.widgets.html5 import NumberInput
+
+from mycodo.config_translations import TRANSLATIONS
 
 
 #
@@ -21,16 +24,16 @@ from wtforms.validators import DataRequired
 
 class CreateAdmin(FlaskForm):
     username = StringField(
-        lazy_gettext('Username'),
-        render_kw={"placeholder": lazy_gettext('Username')},
+        TRANSLATIONS['user']['title'],
+        render_kw={"placeholder": TRANSLATIONS['user']['title']},
         validators=[DataRequired()])
     email = StringField(
-        lazy_gettext('Email'),
-        render_kw={"placeholder": lazy_gettext('Email')},
+        TRANSLATIONS['email']['title'],
+        render_kw={"placeholder": TRANSLATIONS['email']['title']},
         validators=[DataRequired()])
     password = PasswordField(
-        lazy_gettext('Password'),
-        render_kw={"placeholder": lazy_gettext('Password')},
+        TRANSLATIONS['password']['title'],
+        render_kw={"placeholder": TRANSLATIONS['password']['title']},
         validators=[DataRequired()])
     password_repeat = PasswordField(
         lazy_gettext('Repeat Password'),
@@ -44,37 +47,16 @@ class CreateAdmin(FlaskForm):
 
 class Login(FlaskForm):
     username = StringField(
-        lazy_gettext('Username'),
-        render_kw={"placeholder": lazy_gettext("Username")},
+        TRANSLATIONS['user']['title'],
+        render_kw={"placeholder": TRANSLATIONS['user']['title']},
         validators=[DataRequired()]
     )
     password = PasswordField(
-        lazy_gettext('Password'),
-        render_kw={"placeholder": lazy_gettext("Password")},
+        TRANSLATIONS['password']['title'],
+        render_kw={"placeholder": TRANSLATIONS['password']['title']},
         validators=[DataRequired()]
     )
     remember = BooleanField(lazy_gettext('remember'))
-
-
-#
-# Log viewer
-#
-
-class LogView(FlaskForm):
-    lines = IntegerField(
-        lazy_gettext('Number of Lines'),
-        validators=[validators.NumberRange(
-            min=1,
-            message=lazy_gettext('Number of lines should be greater than 0')
-        )]
-    )
-    loglogin = SubmitField(lazy_gettext('Login Log'))
-    loghttp = SubmitField(lazy_gettext('HTTP Log'))
-    logdaemon = SubmitField(lazy_gettext('Daemon Log'))
-    logbackup = SubmitField(lazy_gettext('Backup Log'))
-    logkeepup = SubmitField(lazy_gettext('KeepUp Log'))
-    logupgrade = SubmitField(lazy_gettext('Upgrade Log'))
-    logrestore = SubmitField(lazy_gettext('Restore Log'))
 
 
 #
@@ -88,11 +70,11 @@ class RemoteSetup(FlaskForm):
         validators=[DataRequired()]
     )
     username = StringField(
-        lazy_gettext('Username'),
+        TRANSLATIONS['user']['title'],
         validators=[DataRequired()]
     )
     password = PasswordField(
-        lazy_gettext('Password'),
+        TRANSLATIONS['password']['title'],
         validators=[DataRequired()]
     )
     add = SubmitField(lazy_gettext('Add Host'))

@@ -1,58 +1,92 @@
 # coding=utf-8
 import logging
 
-from .base_input import AbstractInput
+from mycodo.inputs.base_input import AbstractInput
+
+# Measurements
+measurements_dict = {
+    0: {
+        'measurement': 'light',
+        'unit': 'full'
+    },
+    1: {
+        'measurement': 'light',
+        'unit': 'ir'
+    },
+    2: {
+        'measurement': 'light',
+        'unit': 'lux'
+    }
+}
 
 
-class TSL2561Sensor(AbstractInput):
+# Input information
+INPUT_INFORMATION = {
+    'input_name_unique': 'TSL2561',
+    'input_manufacturer': 'TAOS',
+    'input_name': 'TSL2561',
+    'measurements_name': 'Light',
+    'measurements_dict': measurements_dict,
+
+    'options_enabled': [
+        'i2c_location',
+        'measurements_select',
+        'period',
+        'pre_output'
+    ],
+    'options_disabled': ['interface'],
+
+    'dependencies_module': [
+        ('pip-pypi', 'Adafruit_GPIO', 'Adafruit_GPIO'),
+        ('pip-pypi', 'Adafruit_PureIO', 'Adafruit_PureIO'),
+        ('pip-pypi', 'tsl2561', 'tsl2561')
+    ],
+
+    'interfaces': ['I2C'],
+    'i2c_location': ['0x39'],
+    'i2c_address_editable': False
+}
+
+
+class InputModule(AbstractInput):
     """ A sensor support class that monitors the TSL2561's lux """
 
-    def __init__(self, input_dev, testing=False):
-        super(TSL2561Sensor, self).__init__()
+    def __init__(self, input_dev, testing=False, run_main=True):
+        super(InputModule, self).__init__()
         self.logger = logging.getLogger("mycodo.inputs.tsl2561")
-        self._lux = None
+        self.run_main = run_main
 
         if not testing:
             from tsl2561 import TSL2561
             self.logger = logging.getLogger(
-                "mycodo.inputs.tsl2561_{id}".format(id=input_dev.id))
-            self.i2c_address = int(str(input_dev.location), 16)
+                "mycodo.tsl2561_{id}".format(id=input_dev.unique_id.split('-')[0]))
+            self.i2c_address = int(str(input_dev.i2c_location), 16)
             self.i2c_bus = input_dev.i2c_bus
             self.tsl = TSL2561(address=self.i2c_address, busnum=self.i2c_bus)
 
-    def __repr__(self):
-        """  Representation of object """
-        return "<{cls}(lux={lux})>".format(cls=type(self).__name__,
-                                           lux="{0:.2f}".format(self._lux))
-
-    def __str__(self):
-        """ Return lux information """
-        return "Lux: {lux}".format(lux="{0:.2f}".format(self._lux))
-
-    def __iter__(self):  # must return an iterator
-        """ TSL2561Sensor iterates through live lux readings """
-        return self
-
-    def next(self):
-        """ Get next lux reading """
-        if self.read():  # raised an error
-            raise StopIteration  # required
-        return dict(lux=float('{0:.2f}'.format(self._lux)))
-
-    @property
-    def lux(self):
-        """ TSL2561 luminosity in lux """
-        if not self._lux:  # update if needed
-            self.read()
-        return self._lux
-
     def get_measurement(self):
         """ Gets the TSL2561's lux """
-        self._lux = None
+        return_dict = measurements_dict.copy()
+
+        from tsl2561.constants import TSL2561_INTEGRATIONTIME_402MS
+        self.tsl.set_integration_time(TSL2561_INTEGRATIONTIME_402MS)
         saturated = False
         try:
-            lux = self.tsl.lux()
-            return lux
+            full, ir = self.tsl._get_luminosity()
+
+            if self.is_enabled(0):
+                return_dict[0]['value'] = full
+
+            if self.is_enabled(1):
+                return_dict[1]['value'] = ir
+
+            if (self.is_enabled(2) and
+                    self.is_enabled(0) and
+                    self.is_enabled(1)):
+                return_dict[2]['value'] = self.tsl._calculate_lux(
+                    return_dict[0]['value'], return_dict[1]['value'])
+
+            return return_dict
         except Exception as err:
             if 'saturated' in repr(err):
                 self.logger.error(
@@ -67,8 +101,21 @@ class TSL2561Sensor(AbstractInput):
             self.tsl.set_integration_time(TSL2561_INTEGRATIONTIME_101MS)
             saturated = False
             try:
-                lux = self.tsl.lux()
-                return lux
+                full, ir = self.tsl._get_luminosity()
+
+                if self.is_enabled(0):
+                    return_dict[0]['value'] = full
+
+                if self.is_enabled(1):
+                    return_dict[1]['value'] = ir
+
+                if (self.is_enabled(2) and
+                        self.is_enabled(0) and
+                        self.is_enabled(1)):
+                    return_dict[2]['value'] = self.tsl._calculate_lux(
+                        return_dict[0]['value'], return_dict[1]['value'])
+
+                return return_dict
             except Exception as err:
                 if 'saturated' in repr(err):
                     self.logger.error(
@@ -82,29 +129,40 @@ class TSL2561Sensor(AbstractInput):
             from tsl2561.constants import TSL2561_INTEGRATIONTIME_13MS
             self.tsl.set_integration_time(TSL2561_INTEGRATIONTIME_13MS)
             try:
-                lux = self.tsl.lux()
-                return lux
+                full, ir = self.tsl._get_luminosity()
+
+                if self.is_enabled(0):
+                    return_dict[0]['value'] = full
+
+                if self.is_enabled(1):
+                    return_dict[1]['value'] = ir
+
+                if (self.is_enabled(2) and
+                        self.is_enabled(0) and
+                        self.is_enabled(1)):
+                    return_dict[2]['value'] = self.tsl._calculate_lux(
+                        return_dict[0]['value'], return_dict[1]['value'])
+
+                return return_dict
             except Exception as err:
                 if 'saturated' in repr(err):
                     self.logger.error(
                         "Could not obtain measurement: Sensor is saturated. "
                         "Recording value as 65536.")
-                    return 65536.0
+                    return_dict[0]['value'] = 65536.0
+                    return return_dict
                 else:
                     self.logger.exception("Error: {}".format(err))
 
-    def read(self):
-        """
-        Takes a reading from the TSL2561 and updates the self._lux value
 
-        :returns: None on success or 1 on error
-        """
-        try:
-            self._lux = self.get_measurement()
-            if self._lux is not None:
-                return  # success - no errors
-        except Exception as e:
-            self.logger.exception(
-                "{cls} raised an exception when taking a reading: "
-                "{err}".format(cls=type(self).__name__, err=e))
-        return 1
+if __name__ == "__main__":
+    from types import SimpleNamespace
+    settings = SimpleNamespace()
+    settings.id = 1
+    settings.unique_id = '0000-0000'
+    settings.i2c_location = '0x39'
+    settings.i2c_bus = 1
+    settings.run_main = True
+
+    measurements = InputModule(settings, run_main=True).next()
+    print("Measurements: {}".format(measurements))

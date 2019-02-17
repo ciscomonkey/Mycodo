@@ -22,32 +22,62 @@
 import logging
 import time
 
-from .base_input import AbstractInput
-from .sensorutils import convert_units
-from .sensorutils import is_device
+from mycodo.inputs.base_input import AbstractInput
+from mycodo.inputs.sensorutils import is_device
+
+# Measurements
+measurements_dict = {
+    0: {
+        'measurement': 'co2',
+        'unit': 'ppm'
+    }
+}
+
+# Input information
+INPUT_INFORMATION = {
+    'input_name_unique': 'MH_Z16',
+    'input_manufacturer': 'Winsen',
+    'input_name': 'MH-Z16',
+    'measurements_name': 'CO2',
+    'measurements_dict': measurements_dict,
+
+    'options_enabled': [
+        'i2c_location',
+        'uart_location',
+        'period',
+        'pre_output'
+    ],
+    'options_disabled': ['interface'],
+
+    'dependencies_module': [
+        ('pip-pypi', 'smbus2', 'smbus2')
+    ],
+
+    'interfaces': ['UART', 'I2C'],
+    'i2c_location': ['0x63'],
+    'i2c_address_editable': True
+}
 
 
-class MHZ16Sensor(AbstractInput):
+class InputModule(AbstractInput):
     """ A sensor support class that monitors the MH-Z16's CO2 concentration """
 
     def __init__(self, input_dev, testing=False):
-        super(MHZ16Sensor, self).__init__()
+        super(InputModule, self).__init__()
         self.logger = logging.getLogger("mycodo.inputs.mh_z16")
-        self._co2 = None
 
         if not testing:
             self.logger = logging.getLogger(
-                "mycodo.inputs.mh_z16_{id}".format(id=input_dev.id))
+                "mycodo.mh_z16_{id}".format(id=input_dev.unique_id.split('-')[0]))
+
             self.interface = input_dev.interface
-            self.device_loc = input_dev.device_loc
-            self.convert_to_unit = input_dev.convert_to_unit
-            self.i2c_address = int(str(input_dev.location), 16)
-            self.i2c_bus = input_dev.i2c_bus
+            self.uart_location = input_dev.uart_location
+
             if self.interface == 'UART':
                 import serial
 
                 # Check if device is valid
-                self.serial_device = is_device(self.device_loc)
+                self.serial_device = is_device(self.uart_location)
                 if self.serial_device:
                     try:
                         self.ser = serial.Serial(self.serial_device, timeout=1)
@@ -57,10 +87,13 @@ class MHZ16Sensor(AbstractInput):
                     self.logger.error(
                         'Could not open "{dev}". '
                         'Check the device location is correct.'.format(
-                            dev=self.device_loc))
+                            dev=self.uart_location))
 
             elif self.interface == 'I2C':
-                import smbus
+                from smbus2 import SMBus
+
+                self.i2c_address = int(str(input_dev.i2c_location), 16)
+                self.i2c_bus = input_dev.i2c_bus
                 self.cmd_measure = [0xFF, 0x01, 0x9C, 0x00, 0x00, 0x00, 0x00, 0x00, 0x63]
                 self.IOCONTROL = 0X0E << 3
                 self.FCR = 0X02 << 3
@@ -71,39 +104,13 @@ class MHZ16Sensor(AbstractInput):
                 self.RHR = 0x00 << 3
                 self.TXLVL = 0X08 << 3
                 self.RXLVL = 0X09 << 3
-                self.i2c = smbus.SMBus(self.i2c_bus)
+                self.i2c = SMBus(self.i2c_bus)
                 self.begin()
-
-    def __repr__(self):
-        """  Representation of object """
-        return "<{cls}(co2={co2})>".format(
-            cls=type(self).__name__,
-            co2="{0:.2f}".format(self._co2))
-
-    def __str__(self):
-        """ Return CO2 information """
-        return "CO2: {co2}".format(co2="{0:.2f}".format(self._co2))
-
-    def __iter__(self):  # must return an iterator
-        """ MH-Z16 iterates through live CO2 readings """
-        return self
-
-    def next(self):
-        """ Get next CO2 reading """
-        if self.read():  # raised an error
-            raise StopIteration  # required
-        return dict(co2=float('{0:.2f}'.format(self._co2)))
-
-    @property
-    def co2(self):
-        """ CO2 concentration in ppmv """
-        if self._co2 is None:  # update if needed
-            self.read()
-        return self._co2
 
     def get_measurement(self):
         """ Gets the MH-Z16's CO2 concentration in ppmv via UART"""
-        self._co2 = None
+        return_dict = measurements_dict.copy()
+
         co2 = None
 
         if self.interface == 'UART':
@@ -128,33 +135,9 @@ class MHZ16Sensor(AbstractInput):
             except Exception:
                 co2 = None
 
-        co2 = convert_units(
-            'co2', 'ppm', self.convert_to_unit, co2)
+        return_dict[0]['value'] = co2
 
-        return co2
-
-    def read(self):
-        """
-        Takes a reading from the MH-Z16 and updates the self._co2 value
-
-        :returns: None on success or 1 on error
-        """
-        if self.acquiring_measurement:
-            self.logger.error("Attempting to acquire a measurement when a"
-                              " measurement is already being acquired.")
-            return 1
-        try:
-            self.acquiring_measurement = True
-            self._co2 = self.get_measurement()
-            if self._co2 is not None:
-                return  # success - no errors
-        except Exception as e:
-            self.logger.error(
-                "{cls} raised an exception when taking a reading: "
-                "{err}".format(cls=type(self).__name__, err=e))
-        finally:
-            self.acquiring_measurement = False
-        return 1
+        return return_dict
 
     def begin(self):
         try:

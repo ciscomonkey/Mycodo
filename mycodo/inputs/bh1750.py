@@ -2,7 +2,53 @@
 import logging
 import time
 
-from .base_input import AbstractInput
+from mycodo.inputs.base_input import AbstractInput
+from mycodo.databases.models import DeviceMeasurements
+from mycodo.utils.database import db_retrieve_table_daemon
+
+list_sensitivity = []
+for num in range(31, 255):
+    list_sensitivity.append((num, str(num)))
+
+# Measurements
+measurements_dict = {
+    0: {
+        'measurement': 'light',
+        'unit': 'lux'
+    }
+}
+
+# Input information
+INPUT_INFORMATION = {
+    'input_name_unique': 'BH1750',
+    'input_manufacturer': 'ROHM',
+    'input_name': 'BH1750',
+    'measurements_name': 'Light',
+    'measurements_dict': measurements_dict,
+
+    'options_enabled': [
+        'i2c_location',
+        'period',
+        'resolution',
+        'sensitivity',
+        'pre_output'
+    ],
+    'options_disabled': ['interface'],
+
+    'dependencies_module': [
+        ('pip-pypi', 'smbus2', 'smbus2')
+    ],
+
+    'interfaces': ['I2C'],
+    'i2c_location': ['0x23', '0x5c'],
+    'i2c_address_editable': False,
+    'resolution': [
+        (0, 'Low'),
+        (1, 'High'),
+        (2, 'High 2')
+    ],
+    'sensitivity': list_sensitivity
+}
 
 # Define some constants from the datasheet
 POWER_DOWN = 0x00  # No active state
@@ -25,77 +71,51 @@ ONE_TIME_HIGH_RES_MODE_2 = 0x21
 ONE_TIME_LOW_RES_MODE = 0x23
 
 
-class BH1750Sensor(AbstractInput):
+class InputModule(AbstractInput):
     """ A sensor support class that monitors the DS18B20's lux """
     def __init__(self, input_dev, testing=False):
-        super(BH1750Sensor, self).__init__()
+        super(InputModule, self).__init__()
         self.logger = logging.getLogger("mycodo.inputs.bh1750")
-        self._lux = None
 
         if not testing:
-            import smbus
+            from smbus2 import SMBus
             self.logger = logging.getLogger(
-                "mycodo.inputs.bh1750_{id}".format(id=input_dev.id))
-            self.i2c_address = int(str(input_dev.location), 16)
-            self.i2c_bus = input_dev.i2c_bus
+                "mycodo.bh1750_{id}".format(id=input_dev.unique_id.split('-')[0]))
+
+            self.device_measurements = db_retrieve_table_daemon(
+                DeviceMeasurements).filter(
+                    DeviceMeasurements.device_id == input_dev.unique_id)
+
+            self.i2c_address = int(str(input_dev.i2c_location), 16)
             self.resolution = input_dev.resolution
             self.sensitivity = input_dev.sensitivity
-            self.i2c_bus = smbus.SMBus(self.i2c_bus)
+            self.i2c_bus = SMBus(input_dev.i2c_bus)
             self.power_down()
             self.set_sensitivity(sensitivity=self.sensitivity)
-
-    def __repr__(self):
-        """  Representation of object """
-        return "<{cls}(lux={lux})>".format(cls=type(self).__name__,
-                                           lux="{0:.2f}".format(self._lux))
-
-    def __str__(self):
-        """ Return lux information """
-        return "Lux: {lux}".format(lux="{0:.2f}".format(self._lux))
-
-    def __iter__(self):  # must return an iterator
-        """ BH1750Sensor iterates through live lux readings """
-        return self
-
-    def next(self):
-        """ Get next lux reading """
-        if self.read():  # raised an error
-            raise StopIteration  # required
-        return dict(lux=float('{0:.2f}'.format(self._lux)))
 
     @property
     def lux(self):
         """ BH1750 luminosity in lux """
-        if self._lux is None:  # update if needed
+        if self._measurements is None:  # update if needed
             self.read()
-        return self._lux
+        return self._measurements
 
     def get_measurement(self):
         """ Gets the BH1750's lux """
-        self._lux = None
+        return_dict = measurements_dict.copy()
 
         if self.resolution == 0:
-            return self.measure_low_res()
+            lux = self.measure_low_res()
         elif self.resolution == 1:
-            return self.measure_high_res()
+            lux = self.measure_high_res()
         elif self.resolution == 2:
-            return self.measure_high_res2()
+            lux = self.measure_high_res2()
+        else:
+            return None
 
-    def read(self):
-        """
-        Takes a reading from the BH1750 and updates the self._lux value
+        return_dict[0]['value'] = lux
 
-        :returns: None on success or 1 on error
-        """
-        try:
-            self._lux = self.get_measurement()
-            if self._lux is not None:
-                return  # success - no errors
-        except Exception as e:
-            self.logger.exception(
-                "{cls} raised an exception when taking a reading: "
-                "{err}".format(cls=type(self).__name__, err=e))
-        return 1
+        return return_dict
 
     def _set_mode(self, mode):
         self.mode = mode

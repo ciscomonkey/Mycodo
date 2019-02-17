@@ -1,11 +1,64 @@
 # coding=utf-8
 import logging
 
-from .base_input import AbstractInput
-from .sensorutils import convert_units
+from mycodo.databases.models import DeviceMeasurements
+from mycodo.inputs.base_input import AbstractInput
+from mycodo.utils.database import db_retrieve_table_daemon
+
+# Measurements
+measurements_dict = {
+    0: {
+        'measurement': 'battery',
+        'unit': 'percent'
+    },
+    1: {
+        'measurement': 'electrical_conductivity',
+        'unit': 'uS_cm'
+    },
+    2: {
+        'measurement': 'light',
+        'unit': 'lux'
+    },
+    3: {
+        'measurement': 'moisture',
+        'unit': 'unitless'
+    },
+    4: {
+        'measurement': 'temperature',
+        'unit': 'C'
+    }
+}
+
+# Input information
+INPUT_INFORMATION = {
+    'input_name_unique': 'MIFLORA',
+    'input_manufacturer': 'Xiaomi',
+    'input_name': 'Miflora',
+    'measurements_name': 'EC/Light/Moisture/Temperature',
+    'measurements_dict': measurements_dict,
+
+    'options_enabled': [
+        'bt_location',
+        'measurements_select',
+        'period',
+        'pre_output'
+    ],
+    'options_disabled': ['interface'],
+
+    'dependencies_module': [
+        ('apt', 'libglib2.0-dev', 'libglib2.0-dev'),
+        ('pip-pypi', 'miflora', 'miflora'),
+        ('pip-pypi', 'btlewrap', 'btlewrap'),
+        ('pip-pypi', 'bluepy', 'bluepy'),
+    ],
+
+    'interfaces': ['BT'],
+    'bt_location': '00:00:00:00:00:00',
+    'bt_adapter': '0'
+}
 
 
-class MifloraSensor(AbstractInput):
+class InputModule(AbstractInput):
     """
     A sensor support class that measures the Miflora's electrical
     conductivity, moisture, temperature, and light.
@@ -13,91 +66,22 @@ class MifloraSensor(AbstractInput):
     """
 
     def __init__(self, input_dev, testing=False):
-        super(MifloraSensor, self).__init__()
+        super(InputModule, self).__init__()
         self.logger = logging.getLogger("mycodo.inputs.miflora")
-        self._battery = None
-        self._electrical_conductivity = None
-        self._lux = None
-        self._moisture = None
-        self._temperature = None
 
         if not testing:
             from miflora.miflora_poller import MiFloraPoller
             from btlewrap import BluepyBackend
             self.logger = logging.getLogger(
-                "mycodo.inputs.miflora_{id}".format(id=input_dev.id))
+                "mycodo.miflora_{id}".format(id=input_dev.unique_id.split('-')[0]))
+
+            self.device_measurements = db_retrieve_table_daemon(
+                DeviceMeasurements).filter(
+                    DeviceMeasurements.device_id == input_dev.unique_id)
+
             self.location = input_dev.location
             self.bt_adapter = input_dev.bt_adapter
-            self.convert_to_unit = input_dev.convert_to_unit
-            self.poller = MiFloraPoller(self.location, BluepyBackend, adapter=self.bt_adapter)
-
-    def __repr__(self):
-        """  Representation of object """
-        return "<{cls}(battery={bat})(electrical_conductivity={ec})(lux={lux})(moisture={moist})(temperature={temp})>".format(
-            cls=type(self).__name__,
-            bat="{0}".format(self._battery),
-            ec="{0}".format(self._electrical_conductivity),
-            lux="{0}".format(self._lux),
-            moist="{0}".format(self._moisture),
-            temp="{0:.2f}".format(self._temperature))
-
-    def __str__(self):
-        """ Return measurement information """
-        return "Battery: {bat}, Electrical Conductitivty: {ec}. Light: {lux}, Moisture: {moist}, Temperature: {temp}".format(
-            bat="{0}".format(self._battery),
-            ec="{0}".format(self._electrical_conductivity),
-            lux="{0}".format(self._lux),
-            moist="{0}".format(self._moisture),
-            temp="{0:.2f}".format(self._temperature))
-
-    def __iter__(self):  # must return an iterator
-        """ MifloraSensor iterates through live measurement readings """
-        return self
-
-    def next(self):
-        """ Get next measurement reading """
-        if self.read():  # raised an error
-            raise StopIteration  # required
-        return dict(battery=float('{0}'.format(self._battery)),
-                    electrical_conductivity=float('{0}'.format(self._electrical_conductivity)),
-                    lux=float('{0}'.format(self._lux)),
-                    moisture=float('{0}'.format(self._moisture)),
-                    temperature=float('{0:.2f}'.format(self._temperature)))
-
-    @property
-    def battery(self):
-        """ Miflora battery measurement """
-        if self._battery is None:  # update if needed
-            self.read()
-        return self._battery
-
-    @property
-    def electrical_conductivity(self):
-        """ Miflora electrical conductivity measurement """
-        if self._electrical_conductivity is None:  # update if needed
-            self.read()
-        return self._electrical_conductivity
-    
-    @property
-    def lux(self):
-        """ Miflora light measurement """
-        if self._lux is None:  # update if needed
-            self.read()
-        return self._lux
-
-    @property
-    def moisture(self):
-        """ Miflora moisture measurement """
-        if self._moisture is None:  # update if needed
-            self.read()
-        return self._moisture
-
-    @property
-    def temperature(self):
-        """ Miflora temperature in Celsius """
-        if self._temperature is None:  # update if needed
-            self.read()
-        return self._temperature
+            self.poller = MiFloraPoller(self.location, BluepyBackend, adapter='hci{}'.format(self.bt_adapter))
 
     def get_measurement(self):
         """ Gets the light, moisture, and temperature """
@@ -107,38 +91,21 @@ class MifloraSensor(AbstractInput):
         from miflora.miflora_poller import MI_TEMPERATURE
         from miflora.miflora_poller import MI_BATTERY
 
-        self._electrical_conductivity = None
-        self._lux = None
-        self._moisture = None
-        self._temperature = None
+        return_dict = measurements_dict.copy()
 
-        battery = self.poller.parameter_value(MI_BATTERY)
-        electrical_conductivity = self.poller.parameter_value(MI_CONDUCTIVITY)
-        lux = self.poller.parameter_value(MI_LIGHT)
-        moisture = self.poller.parameter_value(MI_MOISTURE)
-        temperature = self.poller.parameter_value(MI_TEMPERATURE)
-        temperature = convert_units(
-            'temperature', 'celsius', self.convert_to_unit,
-            temperature)
-        return battery, electrical_conductivity, lux, moisture, temperature
+        if self.is_enabled(0):
+            return_dict[0]['value'] = self.poller.parameter_value(MI_BATTERY)
 
-    def read(self):
-        """
-        Takes a reading from the AM2315 and updates the self.dew_point,
-        self._humidity, and self._temperature values
+        if self.is_enabled(1):
+            return_dict[1]['value'] = self.poller.parameter_value(MI_CONDUCTIVITY)
 
-        :returns: None on success or 1 on error
-        """
-        try:
-            (self._battery,
-             self._electrical_conductivity,
-             self._lux,
-             self._moisture,
-             self._temperature) = self.get_measurement()
-            if self._electrical_conductivity is not None:
-                return  # success - no errors
-        except Exception as e:
-            self.logger.exception(
-                "{cls} raised an exception when taking a reading: "
-                "{err}".format(cls=type(self).__name__, err=e))
-        return 1
+        if self.is_enabled(2):
+            return_dict[2]['value'] = self.poller.parameter_value(MI_LIGHT)
+
+        if self.is_enabled(3):
+            return_dict[3]['value'] = self.poller.parameter_value(MI_MOISTURE)
+
+        if self.is_enabled(4):
+            return_dict[4]['value'] = self.poller.parameter_value(MI_TEMPERATURE)
+
+        return return_dict

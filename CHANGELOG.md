@@ -1,10 +1,513 @@
-## 6.1.5 (Unreleased)
+## 7.2.3 (Unreleased)
+
+### Bugfixes
+
+ - Fix issue with SHT31 Smart Gadget disconnect error-handling
+
+
+## 7.2.2 (2019-02-08)
+
+### Bugfixes
+
+ - Fix inability to change BMP280 I2C address ([#625](https://github.com/kizniche/mycodo/issues/625))
+ - Fix issue triggering function actions ([#626](https://github.com/kizniche/mycodo/issues/626))
+
+### Features
+
+ - Add log line of PID settings when activated or saved
+ - Add PID Settings button to Mycodo Logs page
+
+
+## 7.2.1 (2019-02-06)
+
+### Bugfixes
+
+ - Remove bluepy version restriction that conflicts with another requirement for the latest version
+ - Fix Energy Usage calculations
+ - Fix output controller startup issue
+ - Fix notes duplicating on graphs
+ - Fix inability of Function Action (Output PWM) to set a duty cycle of 0
+ - Fix inability of Function Action (Activate Controller) to activate Conditional
+ - Fix pigpio dependency issue ([#617](https://github.com/kizniche/mycodo/issues/617))
+
+### Features
+
+ - Add asynchronous graphs to Energy Usage summaries
+
+### Miscellaneous
+
+ - Improve error-handling of Function Actions
+
+
+## 7.2.0 (2019-02-04)
+
+### Bugfixes
+
+ - Fix calculating Output Usage
+ - Fix error-handling of PWM signal generation ([#617](https://github.com/kizniche/mycodo/issues/617))
+ - Fix output dependency issue ([#617](https://github.com/kizniche/mycodo/issues/617))
+
+### Features
+
+ - Add new energy usage/cost analysis based on amperage measurements (See [Energy Usage](https://github.com/kizniche/Mycodo/blob/master/mycodo-manual.rst#energy-usage) in the manual)
+ - Add password recovery feature (technically just creates new admin user from the command line)
+
+
+## 7.1.7 (2019-02-02)
+
+### Bugfixes
+
+ - Attempted fix of output dependency issue ([#617](https://github.com/kizniche/mycodo/issues/617))
+ - Fix PID Autotune ungraceful exit ([#621](https://github.com/kizniche/mycodo/issues/621))
+
+
+## 7.1.6 (2019-01-30)
+
+### Bugfixes
+
+ - Attempted fix of output dependency issue ([#617](https://github.com/kizniche/mycodo/issues/617))
+ - Fix issue creating Triggers ([#618](https://github.com/kizniche/mycodo/issues/618))
+
+### Features
+
+ - Add LCD: 128x64 OLED ([#589](https://github.com/kizniche/mycodo/issues/589))
+ - Improve SHT31 Smart Gadget module
+
+### Miscellaneous
+
+ - Update Translations
+ - Add Languages: Dutch, Norwegian, Serbian, Swedish
+
+
+## 7.1.5 (2019-01-28)
+
+### Bugfixes
+
+ - Fix issue downloading logged data from SHT31 Smart Gadget
+ - Fix issue using PID measurements on Measurement Dashboard widget ([#616](https://github.com/kizniche/mycodo/issues/616))
+ - Fix issue with Python Command Output variable declaration
+
+### Features
+
+ - Add Dashboard widget: Indicator ([#606](https://github.com/kizniche/mycodo/issues/606))
+
+
+## 7.1.4 (2019-01-26)
+
+### Bugfixes
+
+ - Fix dependency issue preventing Mycodo installation ([#614](https://github.com/kizniche/mycodo/issues/614))
+
+### Features
+
+ - Add Diagnostic option: Delete Settings Database
+
+
+## 7.1.3 (2019-01-23)
+
+### Bugfixes
+
+ - Fix missing PID Setpoint measurement
+ - Fix missing location option for Free Space Input
+
+
+## 7.1.2 (2019-01-23)
+
+### Bugfixes
+
+ - Fix Method editing
+
+
+## 7.1.1 (2019-01-22)
+
+### Bugfixes
+
+ - Fix Conditional Statement testing during form save ([#610](https://github.com/kizniche/mycodo/issues/610))
+
+
+## 7.1.0 (2019-01-20)
+
+This release changes Conditional behavior. After upgrading to this version, your Conditional Statements should have every Condition '{ID}' changed to 'measure("{ID}")'. Check every Conditional after the upgrade to ensure they work as expected. Additionally, the recommended logic to store and test measurements has changed, so review the Examples in the [Conditionals section of the manual](https://github.com/kizniche/Mycodo/blob/master/mycodo-manual.rst#conditional).
+
+### Bugfixes
+
+ - Fix Error message when activating/deactivating controllers (no actual error occurred)
+ - Fix (workaround) for inability to display Note whitespaces on Graphs
+
+### Features
+
+ - Add ability to conduct individual measurement in Conditional Statements ([#605](https://github.com/kizniche/mycodo/issues/605))
+ - Add ability to execute individual actions in Conditional Statements ([#605](https://github.com/kizniche/mycodo/issues/605))
+ - Add ability to modify the Conditional message ([#605](https://github.com/kizniche/mycodo/issues/605))
+ - Add Function Actions: Email with Photo Attachment, Email with Video Attachment
+
+
+## 7.0.5 (2019-01-10)
+
+### Bugfixes
+
+ - Fix missing Atlas pH Input baud rate option ([#597](https://github.com/kizniche/mycodo/issues/597))
+ - Fix properly displaying I2C/UART Input options
+ - Fix issue requiring action selection to submit form ([#595](https://github.com/kizniche/mycodo/issues/595))
+ - Fix output duration not being logged if settings saved while output is currently on
+ - Fix instability of dependency system
+ - Fix missing libglib2.0-dev dependency of SHT31 Smart Gadget
+
+### Features
+
+ - Add FTDI support for Atlas Scientific sensors ([#597](https://github.com/kizniche/mycodo/issues/597))
+ - Add Output option to trigger Functions at startup
+
+### Miscellaneous
+
+ - Update SHT31 Smart Gadget Input module
+
+
+## 7.0.4 (2019-01-07)
+
+### Bugfixes
+
+ - Fix issue with converted measurements unable to be used with Conditionals ([#592](https://github.com/kizniche/mycodo/issues/592))
+ - Add pi-bluetooth to SHT31 Smart Gadget dependencies ([#588](https://github.com/kizniche/mycodo/issues/588))
+ - Fix issue using PIDs and Graphs with converted measurement units ([#594](https://github.com/kizniche/mycodo/issues/594))
+ - Fix issue with mixed up order of Graph series
+ - Fix issue recording output durations
+
+### Features
+
+ - Add OWFS support for 1-wire devices (currently only DS18B20, DS18S20 supported) ([#582](https://github.com/kizniche/mycodo/issues/582))
+ - Add ability to delete .dependency and .upgrade files from the web UI ([#590](https://github.com/kizniche/mycodo/issues/590))
+
+### Miscellaneous
+
+ - Update several Python modules, update InfluxDB to 1.7.2
+ - Update manual FAQs
+
+
+## 7.0.3 (2018-12-25)
+
+### Bugfixes
+
+ - Fix rendering new lines in Note text on graphs
+ - Fix display of proper unit on Measurement Dashboard element ([#583](https://github.com/kizniche/mycodo/issues/583))
+ - Fix missing libjpeg-dev dependency for PiOLED ([#584](https://github.com/kizniche/mycodo/issues/584))
+ - Fix dependencies for AMG88xx Input
+
+### Features
+
+ - Add Function Action: Create Note
+ - Add Input: Sonoff TH10/16 humidity and temperature sensor ([#583](https://github.com/kizniche/mycodo/issues/583))
+ - Add Input: AM2320 I2C humidity and temperature sensor ([#585](https://github.com/kizniche/mycodo/issues/585))
+
+### Miscellaneous
+
+ - Change method for detecting 1-wire devices ([#582](https://github.com/kizniche/mycodo/issues/582))
+ - Disable variable replacement in Command Execution Function Action until it can be fixed to work with new measurement system
+
+
+## 7.0.2 (2018-12-21)
+
+### Bugfixes
+
+ - Fix inability to reorder Dashboard, Data, Output, and Function elements
+ - Fix Edge Inputs not appearing in Edge Trigger input selection
+ - Fix use of Atlas pH temperature calibration from Input/Math
+
+### Features
+
+ - Add Additional check for Conditional Statements if {ID} is replaced with None ([#571](https://github.com/kizniche/mycodo/issues/571))
+ - Add ability to set Logging Interval and download logged data from SHT31 Smart Gadget ([#559](https://github.com/kizniche/mycodo/issues/559))
+ - Add Math: Input Backup: If a measurement of an Input cannot be found, look for a measurement of another (or another, etc.) ([#559](https://github.com/kizniche/mycodo/issues/559))
+
+### Miscellaneous
+
+ - Add check so SHT31 Smart Gadget user options don't cause the number of stored measurements to exceed the internal memory
+
+
+## 7.0.1 (2018-12-09)
+
+### Bugfixes
+
+ - Fix PiOLED LCD from changing I2C address when options are saved ([#579](https://github.com/kizniche/mycodo/issues/579))
+ - Fix Generic 16x2/16x4 LCD display issue ([#578](https://github.com/kizniche/mycodo/issues/578))
+ - Fix Math Add dropdown items having the same name ([#580](https://github.com/kizniche/mycodo/issues/580))
+
+### Features
+
+ - Add ability to induce an Input to acquire/store measurements from the web UI
+ - Add Input: SHT31 Smart Gadget (Bluetooth) humidity/temperature sensor ([#559](https://github.com/kizniche/mycodo/issues/559))
+ - Add blank line to LCD display options ([#579](https://github.com/kizniche/mycodo/issues/579))
+
+ ### Miscellaneous
+
+ - Add verification for Conditional Statement code
+
+
+## 7.0.0 (2018-12-08)
+
+The Mycodo 7.0 introduces many redesigned systems, including measurements/units, conversions, conditionals, and more (see full list, below). The remnants of Conditionals have been moved to a new controller, called Triggers, which executes actions in response to event triggers (such as time-based events, Output changes, sunrises/sunsets, etc.). The new Conditional system incorporates a powerful way of developing complex conditional statements. See ([#493](https://github.com/kizniche/mycodo/issues/493)) for more information. Since earlier versions are not compatible with 7.x, all 6.x users will have to perform a fresh install or delete their settings database. An option will be presented on the upgrade page to delete the database and perform an upgrade.
+
+### Bugfixes
+
+ - Fix issue preventing PID Method from changing setpoint (#566)
+ - Fix issue with calibration of DS-type sensors
+ - Fix module loading issue by restarting the daemon following dependency install ([#569](https://github.com/kizniche/mycodo/issues/569))
+ - Fix issue adding Daily Time-Based method ([#550](https://github.com/kizniche/mycodo/issues/550))
+
+### Features
+
+ - Add Function: Execute Actions
+ - Add Function Action: Pause (pause for a duration of time between executing specific actions)
+ - Add Input: MCP9808 (I2C) high accuracy temperature sensor
+ - Add Input: AMG8833 (I2C) 8x8 pixel thermal sensor
+ - Add Input: SHT31 (I2C) humidity/temperature sensor
+ - Add LCD: PiOLED 128x32 (I2C) LCD ([#579](https://github.com/kizniche/mycodo/issues/579))
+ - Add Output: Python Command (On/Off and PWM)
+ - Add Output: Atlas EZO-PMP (I2C/UART) Peristaltic Pump ([#562](https://github.com/kizniche/mycodo/issues/562))
+ - Add Vapor Pressure Deficit calculation to Inputs that measure temperature and relative humidity ([#572](https://github.com/kizniche/mycodo/issues/572))
+ - Add Vapor Pressure Deficit Math controller ([#572](https://github.com/kizniche/mycodo/issues/572))
+ - Add Start Offset option for PID, Math, and Conditionals
+ - Add ability to search Input selection dropdown list
+
+### Miscellaneous
+
+ - Refactor Conditional system ([#493](https://github.com/kizniche/mycodo/issues/493))
+ - Refactor Analog-to-digital converters ([#550](https://github.com/kizniche/mycodo/issues/550))
+ - Refactor Measurement/Unit system ([#550](https://github.com/kizniche/mycodo/issues/550))
+ - Refactor Conversion system ([#493](https://github.com/kizniche/mycodo/issues/493))
+ - Upgrade InfluxDB from 1.6.0 to 1.7.0
+ - Add User Role: Kiosk
+
+
+## 6.4.7 (2018-12-08)
+
+This is the final release of version 6.x. Upgrading to 7.x will require a database wipe. This will be an option presented in the Mycodo upgrade page. If you do not want to lose your Mycodo data (settings AND measurement data), do not upgrade to 7.x.
+
+
+## 6.4.5 (2018-10-17)
+
+### Bugfixes
+
+ - Fix issues with ADS1256 module ([#537](https://github.com/kizniche/mycodo/issues/537))
+ - Fix issue with saving float values
+
+### Miscellaneous
+
+ - Replace smbus with smbus2 ([#549](https://github.com/kizniche/mycodo/issues/549))
+
+
+## 6.4.4 (2018-10-14)
+
+### Features
+
+ - Add enhanced reorder functionality for Input, Output, Math, PID, and Conditional controllers
+ - Add ability to set camera still, timelapse, and video file save locations ([#498](https://github.com/kizniche/mycodo/issues/498))
+ - Add ability to export/import notes and note attachments ([#548](https://github.com/kizniche/mycodo/issues/548))
+
+### Bugfixes
+
+ - Fix authentication issue with Remote Administration
+ - Fix issues with ADS1256 module ([#537](https://github.com/kizniche/mycodo/issues/537))
+ - Fix issue with saving float values
+
+### Miscellaneous
+
+ - Replace smbus with smbus2 ([#549](https://github.com/kizniche/mycodo/issues/549))
+
+
+## 6.4.3 (2018-10-13)
+
+### Bugfixes
+
+ - Fix authentication issue introduced in 6.4.2
+
+
+## 6.4.2 (2018-10-13)
+
+### Features
+
+ - Add MH-Z19 option: enable/disable automatic baseline correction (ABC)
+ - Add ability to Test/trigger all Conditional Actions of a Conditional ([#524](https://github.com/kizniche/mycodo/issues/524))
+
+### Bugfixes
+
+ - Fix Cozir module pycozir egg
+ - Fix often-erroneous first measurement of ZH03B and MH-Z19 sensors
+ - Fix issue with ADS1256 module ([#537](https://github.com/kizniche/mycodo/issues/537))
+
+
+## 6.4.1 (2018-10-11)
+
+### Bugfixes
+
+ - Fix database upgrade issue
+
+
+## 6.4.0 (2018-10-11)
+
+### Features
+
+ - Add Input: ADS1256 Analog-to-digital converter ([#537](https://github.com/kizniche/mycodo/issues/537))
+ - Add ability to create custom options for Input modules ([#525](https://github.com/kizniche/mycodo/issues/525))
+ - Add conversions between ppm/ppb and percent
+
+### Bugfixes
+
+ - Fix issue determining PID setpoint unit on LCDs
+ - Fix issue displaying IP address on LCD
+ - Fix issue with client activating controllers ([#532](https://github.com/kizniche/mycodo/issues/532))
+ - Fix issue with Linux Command Input ([#537](https://github.com/kizniche/mycodo/issues/537))
+ - Fix issue with installing internal dependencies (e.g. pigpiod) ([#538](https://github.com/kizniche/mycodo/issues/538))
+ - Potential fix for Miflora input ([#540](https://github.com/kizniche/mycodo/issues/540))
+ - Fix missing Baud Rate option for K30 input ([#541](https://github.com/kizniche/mycodo/issues/541))
+ - Fix 500 Error on Raspberry Pi Config page ([#536](https://github.com/kizniche/mycodo/issues/536))
+ - Add turning ABC mode off during MHZ19 input initialization ([#546](https://github.com/kizniche/mycodo/issues/546))
+ - Fix German "Output" translation
+
+### Miscellaneous
+
+ - Set InfluxDB timeout to 5 seconds ([#539](https://github.com/kizniche/mycodo/issues/539))
+ - Update Winsen ZH03B input module code ([#543](https://github.com/kizniche/mycodo/issues/543))
+
+
+## 6.3.9 (2018-09-18)
+
+### Bugfixes
+
+ - Fix issue with installing dependencies ([#531](https://github.com/kizniche/mycodo/issues/531))
+ - Fix issue with Edge devices
+
+
+## 6.3.8 (2018-09-17)
+
+### Bugfixes
+
+ - Fix issue with database upgrade
+
+
+## 6.3.7 (2018-09-17)
+
+### Bugfixes
+
+ - Fix issue with database upgrade
+
+
+## 6.3.6 (2018-09-17)
+
+### Bugfixes
+
+ - Fix issue with Edge devices
+
+
+## 6.3.5 (2018-09-17)
+
+### Bugfixes
+
+ - Fix issue with 1-Wire devices ([#529](https://github.com/kizniche/mycodo/issues/529))
+
+
+## 6.3.4 (2018-09-17)
+
+### Bugfixes
+
+ - Fix issue with note system during upgrade ([#529](https://github.com/kizniche/mycodo/issues/529))
+
+
+## 6.3.3 (2018-09-17)
+
+### Bugfixes
+
+ - Fix Cozir input issue
+
+
+## 6.3.2 (2018-09-16)
+
+### Bugfixes
+
+ - Fix ZH03B input
+
+
+## 6.3.1 (2018-09-16)
+
+This release adds the ability to import input modules, allowing new inputs to be created by the user. Documentation (https://github.com/kizniche/Mycodo/blob/master/mycodo-manual.rst#create-your-own-input-module) for developing your own input modules is in development. See issue #525 for more information about it's development and discussion. Also with this release is a new section for Notes (More -> Notes, https://github.com/kizniche/Mycodo/blob/master/mycodo-manual.rst#notes). Notes are associated with one more more tags that can be created. Notes can also have files attached to them. These notes can be displayed on graphs to easily identify when a certain event happened in the past (or future).
+
+### Features
+
+ - Implement self-contained input modules ([#525](https://github.com/kizniche/mycodo/issues/525))
+ - Add Note system ([#527](https://github.com/kizniche/mycodo/issues/527))
+
+
+## 6.2.4 (2018-09-03)
+
+### Features
+
+ - Add Winsen ZH03B Particulate sensor ([#346](https://github.com/kizniche/mycodo/issues/346))
+ - Reduce install to one command
+
+### Bugfixes
+
+ - Fix inability to set camera device ([#519](https://github.com/kizniche/mycodo/issues/519))
+ - Fix initialization of UART MHZ16 ([#520](https://github.com/kizniche/mycodo/issues/520))
+ - Fix issue with BMP280 ([#522](https://github.com/kizniche/mycodo/issues/522))
+
+## 6.2.3 (2018-08-28)
+
+### Bugfixes
+
+ - Fix issue with major version upgrade initialization
+ - Fix issue with PWM output dashboard element updating ([#517](https://github.com/kizniche/mycodo/issues/517))
+ - Fix dependency check for DS-type sensor calibration ([#518](https://github.com/kizniche/mycodo/issues/518))
+ - Fix issue with Adafruit deprecating BMP, TMP, and CCS811 ([#346](https://github.com/kizniche/mycodo/issues/346), [#503](https://github.com/kizniche/mycodo/issues/503))
+
+
+## 6.2.2 (2018-08-22)
+
+### Features
+
+ - Add translations: Italian, Portuguese
+
+### Bugfixes
+
+ - Fix display of IP address on LCD ([#507](https://github.com/kizniche/mycodo/issues/507))
+ - Fix graph manual y-axis min/max ([#516](https://github.com/kizniche/mycodo/issues/516))
+ - Fix issue with deleting all dashboard elements
+
+
+## 6.2.1 (2018-08-20)
+
+### Features
+
+ - Add Diagnostic section of configuration menu with first function: Delete All Dashboard Elements ([#515](https://github.com/kizniche/mycodo/issues/515), [#516](https://github.com/kizniche/mycodo/issues/516))
+
+### Bugfixes
+
+ - Fix issue with units on LCDs ([#514](https://github.com/kizniche/mycodo/issues/514))
+
+
+## 6.2.0 (2018-08-15)
+
+### Features
+
+ - New measurement/unit configuration system (select which unit to convert/store for input measurements) ([#506](https://github.com/kizniche/mycodo/issues/506))
+ - Add ability to create new measurements, units, and conversions ([#506](https://github.com/kizniche/mycodo/issues/506))
+ - Enable conversion of disk space (kB, MB, GB), frequency (Hz, kHz, MHz), and humidity (%, decimal)
+ - Add option to display IP address on LCD ([#507](https://github.com/kizniche/mycodo/issues/507))
+ - Full German Translation ([#507](https://github.com/kizniche/mycodo/issues/507)) (@pmunz75)
+ - Add PID Autotune feature (currently disabled; may be enabled in the release, pending testing)
+ - Add New Translations: Russian, Chinese
+ - Complete Translations: German, Spanish, French
 
 ### Bugfixes
 
  - Fix issue activating Cozir CO2 sensor ([#495](https://github.com/kizniche/mycodo/issues/495))
  - Fix issue with order not updating correctly when Conditional is deleted
  - Fix issue with output usage report generation ([#504](https://github.com/kizniche/mycodo/issues/504))
+ - Fix proper conversion of temperatures/pressure for Wet-Bulb Humidity Math
+ - Fix Atlas pH UART sensor module ([#509](https://github.com/kizniche/mycodo/issues/509))
+
+### Miscellaneous
+
+ - Update InfluxDB 1.5.0 -> 1.6.0
 
 
 ## 6.1.4 (2018-06-28)
@@ -124,6 +627,7 @@
  - Fix display of graph custom y-axis names
  - Fix inability to change pigpiod sample rate ([#458](https://github.com/kizniche/mycodo/issues/458))
 
+
 ## 6.0.6 (2018-04-23)
 
 ### Bugfixes
@@ -144,6 +648,7 @@
  - Fix dependency check ([#422](https://github.com/kizniche/mycodo/issues/422))
  - Try lower integration times when TSL2561 sensor is saturated ([#450](https://github.com/kizniche/mycodo/issues/450))
  - Fix DHT11/DHT22 output power check ([#454](https://github.com/kizniche/mycodo/issues/454))
+
 
 ## 6.0.4 (2018-04-21)
 

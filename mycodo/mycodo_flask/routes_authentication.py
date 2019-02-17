@@ -3,7 +3,6 @@
 
 import datetime
 import logging
-import socket
 import time
 
 import flask_login
@@ -22,8 +21,8 @@ from sqlalchemy import func
 from mycodo.config import LOGIN_ATTEMPTS
 from mycodo.config import LOGIN_BAN_SECONDS
 from mycodo.config import LOGIN_LOG_FILE
+from mycodo.config_translations import TRANSLATIONS
 from mycodo.databases.models import AlembicVersion
-from mycodo.databases.models import Input
 from mycodo.databases.models import Misc
 from mycodo.databases.models import Role
 from mycodo.databases.models import User
@@ -33,20 +32,14 @@ from mycodo.mycodo_flask.utils import utils_general
 from mycodo.utils.utils import test_password
 from mycodo.utils.utils import test_username
 
+logger = logging.getLogger(__name__)
+
 blueprint = Blueprint(
     'routes_authentication',
     __name__,
     static_folder='../static',
     template_folder='../templates'
 )
-
-logger = logging.getLogger(__name__)
-
-
-@blueprint.context_processor
-def inject_hostname():
-    """Variables to send with every login page request"""
-    return dict(host=socket.gethostname())
 
 
 @blueprint.route('/create_admin', methods=('GET', 'POST'))
@@ -116,28 +109,10 @@ def create_admin():
     dismiss_notification = Misc.query.first().dismiss_notification
 
     return render_template('create_admin.html',
+                           dict_translation=TRANSLATIONS,
                            dismiss_notification=dismiss_notification,
                            form_create_admin=form_create_admin,
                            form_notice=form_notice)
-
-
-@blueprint.route('/remote_login', methods=('GET', 'POST'))
-def remote_admin_login():
-    """Authenticate Remote Admin login"""
-    password_hash = request.form.get('password_hash', None)
-    username = request.form.get('username', None)
-
-    if username and password_hash:
-        user = User.query.filter(
-            func.lower(User.name) == username).first()
-    else:
-        user = None
-
-    if user and user.password_hash == password_hash:
-        login_user = User()
-        login_user.id = user.id
-        flask_login.login_user(login_user, remember=False)
-        return "Logged in via Remote Admin"
 
 
 @blueprint.route('/login', methods=('GET', 'POST'))
@@ -203,7 +178,8 @@ def do_login():
             return redirect('/login')
 
     return render_template('login.html',
-                           form_login=form_login,)
+                           dict_translation=TRANSLATIONS,
+                           form_login=form_login)
 
 
 @blueprint.route("/logout")
@@ -225,6 +201,12 @@ def logout():
     return response
 
 
+@blueprint.route('/forgot_password')
+def forgot_password():
+    """Load the default landing page"""
+    return render_template('forgot_password.html')
+
+
 @blueprint.route('/newremote/')
 def newremote():
     """Verify authentication as a client computer to the remote admin"""
@@ -236,7 +218,7 @@ def newremote():
 
     if user:
         if User().check_password(
-                pass_word, user.password_hash).decode('utf-8') == user.password_hash:
+                pass_word, user.password_hash) == user.password_hash:
             try:
                 with open('/var/mycodo-root/mycodo/mycodo_flask/ssl_certs/cert.pem', 'r') as cert:
                     certificate_data = cert.read()
@@ -244,7 +226,7 @@ def newremote():
                 certificate_data = None
             return jsonify(status=0,
                            error_msg=None,
-                           hash=user.password_hash,
+                           hash=str(user.password_hash),
                            certificate=certificate_data)
     return jsonify(status=1,
                    error_msg="Unable to authenticate with user and password.",
@@ -252,26 +234,32 @@ def newremote():
                    certificate=None)
 
 
+@blueprint.route('/remote_login', methods=('GET', 'POST'))
+def remote_admin_login():
+    """Authenticate Remote Admin login"""
+    password_hash = request.form.get('password_hash', None)
+    username = request.form.get('username', None)
+
+    if username and password_hash:
+        user = User.query.filter(
+            func.lower(User.name) == username).first()
+    else:
+        user = None
+
+    if user and str(user.password_hash) == str(password_hash):
+        login_user = User()
+        login_user.id = user.id
+        flask_login.login_user(login_user, remember=False)
+        return "Logged in via Remote Admin"
+    else:
+        return "ERROR"
+
+
 @blueprint.route('/auth/')
 @flask_login.login_required
 def remote_auth():
     """Checks authentication for remote admin"""
     return "authenticated"
-
-
-@blueprint.route('/remote_get_inputs/')
-@flask_login.login_required
-def remote_get_inputs():
-    """Checks authentication for remote admin"""
-    inputs = Input.query.all()
-    return_inputs = {}
-    for each_input in inputs:
-        return_inputs[each_input.id] = {}
-        return_inputs[each_input.id]['name'] = each_input.name
-        return_inputs[each_input.id]['device'] = each_input.device
-        return_inputs[each_input.id]['is_activated'] = each_input.is_activated
-
-    return jsonify(return_inputs)
 
 
 def admin_exists():

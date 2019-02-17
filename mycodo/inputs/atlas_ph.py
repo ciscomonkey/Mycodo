@@ -2,82 +2,151 @@
 import logging
 import time
 
+from flask_babel import lazy_gettext
+
+from mycodo.databases.models import Conversion
+from mycodo.databases.models import DeviceMeasurements
+from mycodo.inputs.base_input import AbstractInput
 from mycodo.utils.calibration import AtlasScientificCommand
+from mycodo.utils.database import db_retrieve_table_daemon
 from mycodo.utils.influx import read_last_influxdb
+from mycodo.utils.system_pi import return_measurement_info
 from mycodo.utils.system_pi import str_is_float
-from .base_input import AbstractInput
 
 
-class AtlaspHSensor(AbstractInput):
+def constraints_pass_positive_value(mod_input, value):
+    """
+    Check if the user input is acceptable
+    :param mod_input: SQL object with user-saved Input options
+    :param value: float or int
+    :return: tuple: (bool, list of strings)
+    """
+    errors = []
+    all_passed = True
+    # Ensure value is positive
+    if value <= 0:
+        all_passed = False
+        errors.append("Must be a positive value")
+    return all_passed, errors, mod_input
+
+
+# Measurements
+measurements_dict = {
+    0: {
+        'measurement': 'ion_concentration',
+        'unit': 'pH'
+    }
+}
+
+
+# Input information
+INPUT_INFORMATION = {
+    'input_name_unique': 'ATLAS_PH',
+    'input_manufacturer': 'Atlas',
+    'input_name': 'Atlas pH',
+    'measurements_name': 'Ion Concentration',
+    'measurements_dict': measurements_dict,
+
+    'options_enabled': [
+        'ftdi_location',
+        'i2c_location',
+        'uart_location',
+        'uart_baud_rate',
+        'period',
+        'single_input_math',
+        'custom_options',
+        'pre_output'
+    ],
+    'options_disabled': ['interface'],
+
+    'dependencies_module': [
+        ('pip-pypi', 'pylibftdi', 'pylibftdi')
+    ],
+
+    'interfaces': ['I2C', 'UART', 'FTDI'],
+    'i2c_location': ['0x66'],
+    'i2c_address_editable': True,
+    'uart_location': '/dev/ttyAMA0',
+    'uart_baud_rate': 9600,
+
+    'custom_options': [
+        {
+            'id': 'max_age',
+            'type': 'integer',
+            'default_value': 120,
+            'constraints_pass': constraints_pass_positive_value,
+            'name': lazy_gettext('Calibration Max Age'),
+            'phrase': lazy_gettext('The Max Age (seconds) of the Input/Math to use for calibration')
+        }
+    ]
+}
+
+
+class InputModule(AbstractInput):
     """A sensor support class that monitors the Atlas Scientific sensor pH"""
 
     def __init__(self, input_dev, testing=False):
-        super(AtlaspHSensor, self).__init__()
+        super(InputModule, self).__init__()
         self.logger = logging.getLogger("mycodo.inputs.atlas_ph")
-        self._ph = None
+        self.atlas_sensor_ftdi = None
         self.atlas_sensor_uart = None
         self.atlas_sensor_i2c = None
+        self.ftdi_location = None
+        self.uart_location = None
+        self.i2c_address = None
+        self.i2c_bus = None
 
         if not testing:
             self.logger = logging.getLogger(
-                "mycodo.inputs.atlas_ph_{id}".format(id=input_dev.id))
+                "mycodo.inputs.atlas_ph_{id}".format(id=input_dev.unique_id.split('-')[0]))
+
             self.input_dev = input_dev
             self.interface = input_dev.interface
-            self.device_loc = input_dev.device_loc
-            self.i2c_address = int(str(input_dev.location), 16)
-            self.i2c_bus = input_dev.i2c_bus
             self.calibrate_sensor_measure = input_dev.calibrate_sensor_measure
+            self.max_age = None
+
+            if input_dev.custom_options:
+                for each_option in input_dev.custom_options.split(';'):
+                    option = each_option.split(',')[0]
+                    value = each_option.split(',')[1]
+                    if option == 'max_age':
+                        self.max_age = int(value)
+
             try:
                 self.initialize_sensor()
             except Exception:
                 self.logger.exception("Exception while initializing sensor")
 
-    def __repr__(self):
-        """ Representation of object """
-        return "<{cls}(ph={ph})>".format(
-            cls=type(self).__name__,
-            ph="{0:.2f}".format(self._ph))
-
-    def __str__(self):
-        """ Return pH information """
-        return "pH: {ph}".format(ph="{0:.2f}".format(self._ph))
-
-    def __iter__(self):  # must return an iterator
-        """ Atlas pH sensor iterates through live pH readings """
-        return self
-
-    def next(self):
-        """ Get next pH reading """
-        if self.read():  # raised an error
-            raise StopIteration  # required
-        return dict(ph=float(self._ph))
-
-    @property
-    def ph(self):
-        """ pH (potential hydrogen) in moles/liter """
-        if self._ph is None:  # update if needed
-            self.read()
-        return self._ph
-
     def initialize_sensor(self):
+        from mycodo.devices.atlas_scientific_ftdi import AtlasScientificFTDI
         from mycodo.devices.atlas_scientific_i2c import AtlasScientificI2C
         from mycodo.devices.atlas_scientific_uart import AtlasScientificUART
-        if self.interface == 'UART':
+        if self.interface == 'FTDI':
+            self.ftdi_location = self.input_dev.ftdi_location
             self.logger = logging.getLogger(
-                "mycodo.inputs.atlas_ph_{uart}".format(
-                    uart=self.device_loc))
-            self.atlas_sensor_uart = AtlasScientificUART(self.device_loc)
+                "mycodo.inputs.atlas_ph_ftdi_{ftdi}".format(
+                    ftdi=self.ftdi_location))
+            self.atlas_sensor_ftdi = AtlasScientificFTDI(self.ftdi_location)
+        elif self.interface == 'UART':
+            self.uart_location = self.input_dev.uart_location
+            self.logger = logging.getLogger(
+                "mycodo.inputs.atlas_ph_uart_{uart}".format(
+                    uart=self.uart_location))
+            self.atlas_sensor_uart = AtlasScientificUART(self.uart_location)
         elif self.interface == 'I2C':
+            self.i2c_address = int(str(self.input_dev.i2c_location), 16)
             self.logger = logging.getLogger(
-                "mycodo.inputs.atlas_ph_{bus}_{add}".format(
+                "mycodo.inputs.atlas_ph_i2c_{bus}_{add}".format(
                     bus=self.i2c_bus, add=self.i2c_address))
+            self.i2c_bus = self.input_dev.i2c_bus
             self.atlas_sensor_i2c = AtlasScientificI2C(
                 i2c_address=self.i2c_address, i2c_bus=self.i2c_bus)
 
     def get_measurement(self):
         """ Gets the sensor's pH measurement via UART/I2C """
-        self._ph = None
         ph = None
+
+        return_dict = measurements_dict.copy()
 
         # Calibrate the pH measurement based on a temperature measurement
         if (self.calibrate_sensor_measure and
@@ -85,9 +154,25 @@ class AtlaspHSensor(AbstractInput):
             self.logger.debug("pH sensor set to calibrate temperature")
 
             device_id = self.calibrate_sensor_measure.split(',')[0]
-            measurement = self.calibrate_sensor_measure.split(',')[1]
+            measurement_id = self.calibrate_sensor_measure.split(',')[1]
+
+            device_measurement = self.device_measurements.filter(
+                DeviceMeasurements.unique_id == measurement_id).first()
+            if device_measurement:
+                conversion = db_retrieve_table_daemon(
+                    Conversion, unique_id=device_measurement.conversion_id)
+            else:
+                conversion = None
+            channel, unit, measurement = return_measurement_info(
+                device_measurement, conversion)
+
             last_measurement = read_last_influxdb(
-                device_id, measurement, duration_sec=300)
+                device_id,
+                measurement.unit,
+                measurement.measurement,
+                measurement.channel,
+                self.max_age)
+
             if last_measurement:
                 self.logger.debug(
                     "Latest temperature used to calibrate: {temp}".format(
@@ -101,9 +186,52 @@ class AtlaspHSensor(AbstractInput):
                 self.logger.debug(
                     "Calibration returned: {val}, {msg}".format(
                         val=ret_value, msg=ret_msg))
+            else:
+                self.logger.error(
+                    "Calibration measurement not found within the past "
+                    "{} seconds".format(self.max_age))
+
+        # Read sensor via FTDI
+        if self.interface == 'FTDI':
+            if self.atlas_sensor_ftdi.setup:
+                lines = self.atlas_sensor_ftdi.query('R')
+                if lines:
+                    self.logger.debug(
+                        "All Lines: {lines}".format(lines=lines))
+
+                    # 'check probe' indicates an error reading the sensor
+                    if 'check probe' in lines:
+                        self.logger.error(
+                            '"check probe" returned from sensor')
+                    # if a string resembling a float value is returned, this
+                    # is out measurement value
+                    elif str_is_float(lines[0]):
+                        ph = float(lines[0])
+                        self.logger.debug(
+                            'Value[0] is float: {val}'.format(val=ph))
+                    else:
+                        # During calibration, the sensor is put into
+                        # continuous mode, which causes a return of several
+                        # values in one string. If the return value does
+                        # not represent a float value, it is likely to be a
+                        # string of several values. This parses and returns
+                        # the first value.
+                        if str_is_float(lines[0].split(b'\r')[0]):
+                            ph = lines[0].split(b'\r')[0]
+                        # Lastly, this is called if the return value cannot
+                        # be determined. Watchthe output in the GUI to see
+                        # what it is.
+                        else:
+                            ph = lines[0]
+                            self.logger.error(
+                                'Value[0] is not float or "check probe": '
+                                '{val}'.format(val=ph))
+            else:
+                self.logger.error('FTDI device is not set up.'
+                                  'Check the log for errors.')
 
         # Read sensor via UART
-        if self.interface == 'UART':
+        elif self.interface == 'UART':
             if self.atlas_sensor_uart.setup:
                 lines = self.atlas_sensor_uart.query('R')
                 if lines:
@@ -155,20 +283,6 @@ class AtlaspHSensor(AbstractInput):
                 self.logger.error(
                     'I2C device is not set up. Check the log for errors.')
 
-        return ph
+        return_dict[0]['value'] = ph
 
-    def read(self):
-        """
-        Takes a reading from the sensor and updates the self._ph value
-
-        :returns: None on success or 1 on error
-        """
-        try:
-            self._ph = self.get_measurement()
-            if self._ph is not None:
-                return # success - no errors
-        except Exception as e:
-            self.logger.exception(
-                "{cls} raised an exception when taking a reading: "
-                "{err}".format(cls=type(self).__name__, err=e))
-        return 1
+        return return_dict

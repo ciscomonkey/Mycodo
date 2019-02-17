@@ -11,7 +11,9 @@ fi
 # Raspberry Pi but should work with most debian-based systems.
 APT_PKGS="fswebcam gawk gcc git libffi-dev libi2c-dev logrotate \
           moreutils nginx python-setuptools sqlite3 wget \
-          python3 python3-dev python3-smbus"
+          python3 python3-dev python3-smbus python3-pylint-common"
+
+PYTHON_BINARY_SYS_LOC="$(python3.5 -c "import os; print(os.environ['_'])")"
 
 # Get the Mycodo root directory
 SOURCE="${BASH_SOURCE[0]}"
@@ -21,6 +23,7 @@ while [ -h "$SOURCE" ]; do # resolve $SOURCE until the file is no longer a symli
   [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE" # if $SOURCE was a relative symlink, we need to resolve it relative to the path where the symlink file was located
 done
 MYCODO_PATH="$( cd -P "$( dirname "${SOURCE}" )/../.." && pwd )"
+
 cd ${MYCODO_PATH}
 
 HELP_OPTIONS="upgrade_commands.sh [option] - Program to execute various mycodo commands
@@ -43,6 +46,7 @@ Options:
   update-alembic                Use alembic to upgrade the mycodo.db settings database
   update-apt                    Update apt sources
   update-cron                   Update cron entries
+  install-bcm2835               Install bcm2835
   install-pigpiod               Install pigpiod
   uninstall-pigpiod             Uninstall pigpiod
   disable-pigpiod               Disable pigpiod
@@ -58,10 +62,7 @@ Options:
   update-permissions            Set permissions for Mycodo directories/files
   update-pip3                   Update pip
   update-pip3-packages          Update required pip packages
-  install-pip-dependency [dep]  Install [dep]
   update-swap-size              Ensure sqap size is sufficiently large (512 MB)
-  install-numpy                 Install numpy
-  install-wiringpi              Install wiringpi
   upgrade                       Upgrade Mycodo to the latest release
   upgrade-major-release         Upgrade Mycodo to a major version release
   upgrade-master                Upgrade Mycodo to the master branch of the Mycodo github repository
@@ -94,6 +95,7 @@ case "${1:-''}" in
         printf "\n#### Creating files and directories\n"
         mkdir -p /var/log/mycodo
         mkdir -p /var/Mycodo-backups
+        mkdir -p ${MYCODO_PATH}/note_attachments
 
         if [ ! -e /var/log/mycodo/mycodo.log ]; then
             touch /var/log/mycodo/mycodo.log
@@ -142,7 +144,10 @@ case "${1:-''}" in
         adduser mycodo dialout
         adduser mycodo gpio
         adduser mycodo i2c
+        adduser mycodo kmem
         adduser mycodo video
+        adduser pi mycodo
+        adduser mycodo pi
     ;;
     'initialize')
         printf "\n#### Running initialization\n"
@@ -165,7 +170,7 @@ case "${1:-''}" in
             printf "#### Virtualenv doesn't exist. Creating...\n"
             pip install virtualenv --upgrade
             rm -rf ${MYCODO_PATH}/env
-            virtualenv --system-site-packages -p /usr/bin/python3.5 ${MYCODO_PATH}/env
+            virtualenv --system-site-packages -p ${PYTHON_BINARY_SYS_LOC} ${MYCODO_PATH}/env
         else
             printf "#### Virtualenv already exists, skipping creation\n"
         fi
@@ -209,11 +214,24 @@ case "${1:-''}" in
         apt-get update
     ;;
     'update-cron')
-        printf "\n#### Updating Mycodo crontab entry\n"
-        /bin/bash ${MYCODO_PATH}/install/crontab.sh mycodo --remove
         printf "\n#### Updating Mycodo restart monitor crontab entry\n"
         /bin/bash ${MYCODO_PATH}/install/crontab.sh restart_daemon --remove
         /bin/bash ${MYCODO_PATH}/install/crontab.sh restart_daemon
+    ;;
+    'install-bcm2835')
+        printf "\n#### Installing bcm2835\n"
+        cd ${MYCODO_PATH}/install
+        apt-get install -y automake libtool
+        wget http://www.airspayce.com/mikem/bcm2835/bcm2835-1.50.tar.gz
+        tar zxvf bcm2835-1.50.tar.gz
+        cd bcm2835-1.50
+        autoreconf -vfi
+        ./configure
+        make
+        sudo make check
+        sudo make install
+        cd ${MYCODO_PATH}/install
+        rm -rf ./bcm2835-1.50
     ;;
     'install-pigpiod')
         printf "\n#### Installing pigpiod\n"
@@ -228,6 +246,8 @@ case "${1:-''}" in
         rm -rf ./PIGPIO
         /bin/bash ${MYCODO_PATH}/mycodo/scripts/upgrade_commands.sh disable-pigpiod
         /bin/bash ${MYCODO_PATH}/mycodo/scripts/upgrade_commands.sh enable-pigpiod-low
+        mkdir -p /opt/mycodo
+        touch /opt/mycodo/pigpio_installed
     ;;
     'uninstall-pigpiod')
         printf "\n#### Uninstalling pigpiod\n"
@@ -240,6 +260,7 @@ case "${1:-''}" in
         cd ${MYCODO_PATH}/install
         rm -rf ./PIGPIO
         touch /etc/systemd/system/pigpiod_uninstalled.service
+        rm -f /opt/mycodo/pigpio_installed
     ;;
     'disable-pigpiod')
         printf "\n#### Disabling installed pigpiod startup script\n"
@@ -294,8 +315,8 @@ case "${1:-''}" in
     'update-influxdb')
         printf "\n#### Ensuring compatible version of influxdb is installed ####\n"
         INSTALL_ADDRESS="https://dl.influxdata.com/influxdb/releases/"
-        INSTALL_FILE="influxdb_1.5.0_armhf.deb"
-        CORRECT_VERSION="1.5.0-1"
+        INSTALL_FILE="influxdb_1.7.2_armhf.deb"
+        CORRECT_VERSION="1.7.2-1"
         CURRENT_VERSION=$(apt-cache policy influxdb | grep 'Installed' | gawk '{print $2}')
         if [ "${CURRENT_VERSION}" != "${CORRECT_VERSION}" ]; then
             echo "#### Incorrect InfluxDB version (v${CURRENT_VERSION}) installed. Installing v${CORRECT_VERSION}..."
@@ -374,15 +395,6 @@ case "${1:-''}" in
             ${MYCODO_PATH}/env/bin/pip3 install --upgrade -r ${MYCODO_PATH}/install/requirements.txt
         fi
     ;;
-    'install-pip-dependency')
-        printf "\n#### Installing ${2} with pip\n"
-        if [ ! -d ${MYCODO_PATH}/env ]; then
-            printf "\n## Error: Virtualenv doesn't exist. Creating...\n"
-            /bin/bash ${MYCODO_PATH}/mycodo/scripts/upgrade_commands.sh setup-virtualenv
-        else
-            ${MYCODO_PATH}/env/bin/pip3 install --upgrade ${2}
-        fi
-    ;;
     'update-swap-size')
         printf "\n#### Checking if swap size is 100 MB and needs to be changed to 512 MB\n"
         if grep -q "CONF_SWAPSIZE=100" "/etc/dphys-swapfile"; then
@@ -393,18 +405,6 @@ case "${1:-''}" in
         else
             printf "#### Swap not currently set to 100 MB. Not changing.\n"
         fi
-    ;;
-    'install-numpy')
-        printf "\n#### Installing numpy\n"
-        apt-get install -y python3-numpy
-    ;;
-    'install-wiringpi')
-        printf "\n#### Installing wiringpi\n"
-        git clone git://git.drogon.net/wiringPi ${MYCODO_PATH}/install/wiringPi
-        cd ${MYCODO_PATH}/install/wiringPi
-        ./build
-        cd ${MYCODO_PATH}/install
-        rm -rf ./wiringPi
     ;;
     'upgrade')
         /bin/bash ${MYCODO_PATH}/mycodo/scripts/upgrade_mycodo_release.sh
@@ -455,6 +455,6 @@ case "${1:-''}" in
         systemctl enable ${MYCODO_PATH}/install/mycodoflask.service
     ;;
     *)
-        printf "Error: Unrecognized command\n${HELP_OPTIONS}"
+        printf "Error: Unrecognized command: ${1}\n${HELP_OPTIONS}"
     ;;
 esac

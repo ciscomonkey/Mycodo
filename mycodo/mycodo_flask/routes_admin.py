@@ -20,11 +20,13 @@ from pkg_resources import parse_version
 
 from mycodo.config import BACKUP_LOG_FILE
 from mycodo.config import BACKUP_PATH
+from mycodo.config import CALIBRATION_INFO
 from mycodo.config import DEPENDENCY_INIT_FILE
 from mycodo.config import DEPENDENCY_LOG_FILE
 from mycodo.config import FINAL_RELEASES
 from mycodo.config import FORCE_UPGRADE_MASTER
 from mycodo.config import INSTALL_DIRECTORY
+from mycodo.config import LCD_INFO
 from mycodo.config import MATH_INFO
 from mycodo.config import METHOD_INFO
 from mycodo.config import MYCODO_VERSION
@@ -33,7 +35,6 @@ from mycodo.config import RESTORE_LOG_FILE
 from mycodo.config import STATS_CSV
 from mycodo.config import UPGRADE_INIT_FILE
 from mycodo.config import UPGRADE_LOG_FILE
-from mycodo.config_devices_units import DEVICE_INFO
 from mycodo.databases.models import Misc
 from mycodo.mycodo_flask.extensions import db
 from mycodo.mycodo_flask.forms import forms_dependencies
@@ -42,6 +43,7 @@ from mycodo.mycodo_flask.routes_static import inject_variables
 from mycodo.mycodo_flask.utils import utils_general
 from mycodo.utils.github_release_info import github_latest_release
 from mycodo.utils.github_release_info import github_releases
+from mycodo.utils.inputs import parse_input_information
 from mycodo.utils.statistics import return_stat_file_dict
 from mycodo.utils.system_pi import can_perform_backup
 from mycodo.utils.system_pi import get_directory_size
@@ -136,31 +138,28 @@ def admin_backup():
 
 def install_dependencies(dependencies):
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    dependency_list = []
+    for each_dependency in dependencies:
+        if each_dependency[0] not in dependency_list:
+            dependency_list.append(each_dependency[0])
     with open(DEPENDENCY_LOG_FILE, 'a') as f:
         f.write("\n[{time}] Dependency installation beginning. Installing: {deps}\n\n".format(
-            time=now, deps=",".join(dependencies)))
+            time=now, deps=",".join(dependency_list)))
 
     for each_dep in dependencies:
         cmd = "{pth}/mycodo/scripts/mycodo_wrapper install_dependency {dep}" \
               " | ts '[%Y-%m-%d %H:%M:%S]' >> {log} 2>&1".format(
             pth=INSTALL_DIRECTORY,
             log=DEPENDENCY_LOG_FILE,
-            dep=each_dep)
+            dep=each_dep[1])
         dep = subprocess.Popen(cmd, shell=True)
         dep.wait()
         now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         with open(DEPENDENCY_LOG_FILE, 'a') as f:
-            f.write("\n[{time}] Successfully installed {dep}\n\n".format(
-                time=now, dep=each_dep))
+            f.write("\n[{time}] End install of {dep}\n\n".format(
+                time=now, dep=each_dep[0]))
 
     cmd = "{pth}/mycodo/scripts/mycodo_wrapper update_permissions" \
-          " | ts '[%Y-%m-%d %H:%M:%S]' >> {log}  2>&1".format(
-        pth=INSTALL_DIRECTORY,
-        log=DEPENDENCY_LOG_FILE)
-    init = subprocess.Popen(cmd, shell=True)
-    init.wait()
-
-    cmd = "{pth}/mycodo/scripts/mycodo_wrapper frontend_restart" \
           " | ts '[%Y-%m-%d %H:%M:%S]' >> {log}  2>&1".format(
         pth=INSTALL_DIRECTORY,
         log=DEPENDENCY_LOG_FILE)
@@ -173,6 +172,20 @@ def install_dependencies(dependencies):
 
     with open(DEPENDENCY_INIT_FILE, 'w') as f:
         f.write('0')
+
+    cmd = "{pth}/mycodo/scripts/mycodo_wrapper daemon_restart" \
+          " | ts '[%Y-%m-%d %H:%M:%S]' >> {log}  2>&1".format(
+        pth=INSTALL_DIRECTORY,
+        log=DEPENDENCY_LOG_FILE)
+    init = subprocess.Popen(cmd, shell=True)
+    init.wait()
+
+    cmd = "{pth}/mycodo/scripts/mycodo_wrapper frontend_restart" \
+          " | ts '[%Y-%m-%d %H:%M:%S]' >> {log}  2>&1".format(
+        pth=INSTALL_DIRECTORY,
+        log=DEPENDENCY_LOG_FILE)
+    init = subprocess.Popen(cmd, shell=True)
+    init.wait()
 
 
 @blueprint.route('/admin/dependencies', methods=('GET', 'POST'))
@@ -188,9 +201,9 @@ def admin_dependencies(device):
     form_dependencies = forms_dependencies.Dependencies()
 
     if device != '0':
-        device_unmet_dependencies = utils_general.return_dependencies(device)
+        device_unmet_dependencies, _ = utils_general.return_dependencies(device)
     elif form_dependencies.device.data:
-        device_unmet_dependencies = utils_general.return_dependencies(form_dependencies.device.data)
+        device_unmet_dependencies, _ = utils_general.return_dependencies(form_dependencies.device.data)
     else:
         device_unmet_dependencies = []
 
@@ -200,6 +213,7 @@ def admin_dependencies(device):
     met_exist = False
     unmet_list = {}
     install_in_progress = False
+    device_name = None
 
     # Read from the dependency status file created by the upgrade script
     # to indicate if the upgrade is running.
@@ -216,23 +230,35 @@ def admin_dependencies(device):
     if dep:
         install_in_progress = True
 
+    dict_inputs = parse_input_information()
+
     list_dependencies = [
-        DEVICE_INFO,
+        dict_inputs,
+        LCD_INFO,
         MATH_INFO,
         METHOD_INFO,
-        OUTPUT_INFO
+        OUTPUT_INFO,
+        CALIBRATION_INFO
     ]
     for each_section in list_dependencies:
         for each_device in each_section:
+
+            if device in each_section:
+                for each_device, each_val in each_section[device].items():
+                    if each_device in ['name', 'input_name']:
+                        device_name = each_val
+
             # Determine if there are any unmet dependencies
+            dep_unmet, dep_met = utils_general.return_dependencies(each_device)
+
             unmet_dependencies.update({
-                each_device: utils_general.return_dependencies(each_device)
+                each_device: dep_unmet
             })
-            if utils_general.return_dependencies(each_device):
+            if dep_unmet:
                 unmet_exist = True
 
             # Determine if there are any met dependencies
-            if utils_general.return_dependencies(each_device, dep_type='met'):
+            if dep_met:
                 if each_device not in met_dependencies:
                     met_dependencies.append(each_device)
                     met_exist = True
@@ -261,9 +287,10 @@ def admin_dependencies(device):
         return redirect(url_for('routes_admin.admin_dependencies', device=device))
 
     return render_template('admin/dependencies.html',
-                           measurements=DEVICE_INFO,
+                           measurements=parse_input_information(),
                            unmet_list=unmet_list,
                            device=device,
+                           device_name=device_name,
                            install_in_progress=install_in_progress,
                            unmet_dependencies=unmet_dependencies,
                            unmet_exist=unmet_exist,
@@ -402,23 +429,29 @@ def admin_upgrade():
         mod_misc.mycodo_upgrade_available = upgrade_available
         db.session.commit()
 
+    def not_enough_space_upgrade():
+        backup_size, free_before, free_after = can_perform_backup()
+        if free_after / 1000000 < 50:
+            flash(
+                "A backup must be performed during an upgrade and there is "
+                "not enough free space to perform a backup. A backup "
+                "requires {size_bu:.1f} MB but there is only {size_free:.1f} "
+                "MB available, which would leave {size_after:.1f} MB after "
+                "the backup. If the free space after a backup is less than 50"
+                " MB, the backup cannot proceed. Free up space by deleting "
+                "current backups.".format(size_bu=backup_size / 1000000,
+                                          size_free=free_before / 1000000,
+                                          size_after=free_after / 1000000),
+                'error')
+            return True
+        else:
+            return False
+
     if request.method == 'POST':
         if (form_upgrade.upgrade.data and
                 (upgrade_available or FORCE_UPGRADE_MASTER)):
-            backup_size, free_before, free_after = can_perform_backup()
-            if free_after / 1000000 < 50:
-                flash(
-                    "A backup must be performed during an upgrade and there "
-                    "is not enough free space to perform a backup. A backup "
-                    "requires {size_bu:.1f} MB but there is only "
-                    "{size_free:.1f} MB available, which would leave "
-                    "{size_after:.1f} MB after the backup. If the free space "
-                    "after a backup is less than 50 MB, the backup cannot "
-                    "proceed. Free up space by deleting current "
-                    "backups.".format(size_bu=backup_size / 1000000,
-                                      size_free=free_before / 1000000,
-                                      size_after=free_after / 1000000),
-                    'error')
+            if not_enough_space_upgrade():
+                pass
             elif FORCE_UPGRADE_MASTER:
                 cmd = "{pth}/mycodo/scripts/mycodo_wrapper upgrade-master" \
                       " | ts '[%Y-%m-%d %H:%M:%S]'" \
@@ -440,23 +473,9 @@ def admin_upgrade():
                 mod_misc.mycodo_upgrade_available = False
                 db.session.commit()
                 flash(gettext("The upgrade has started"), "success")
-        elif (form_upgrade.upgrade_major_version.data and
+        elif (form_upgrade.upgrade_next_major_version.data and
                 upgrade_available):
-            backup_size, free_before, free_after = can_perform_backup()
-            if free_after / 1000000 < 50:
-                flash(
-                    "A backup must be performed during an upgrade and there "
-                    "is not enough free space to perform a backup. A backup "
-                    "requires {size_bu:.1f} MB but there is only "
-                    "{size_free:.1f} MB available, which would leave "
-                    "{size_after:.1f} MB after the backup. If the free space "
-                    "after a backup is less than 50 MB, the backup cannot "
-                    "proceed. Free up space by deleting current "
-                    "backups.".format(size_bu=backup_size / 1000000,
-                                      size_free=free_before / 1000000,
-                                      size_after=free_after / 1000000),
-                    'error')
-            else:
+            if not not_enough_space_upgrade():
                 cmd = "{pth}/mycodo/scripts/mycodo_wrapper upgrade-release-major {ver}" \
                       " | ts '[%Y-%m-%d %H:%M:%S]'" \
                       " >> {log} 2>&1".format(pth=INSTALL_DIRECTORY,

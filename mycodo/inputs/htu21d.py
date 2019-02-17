@@ -23,12 +23,59 @@
 import logging
 import time
 
-from .base_input import AbstractInput
-from .sensorutils import convert_units
-from .sensorutils import dewpoint
+from mycodo.databases.models import DeviceMeasurements
+from mycodo.inputs.base_input import AbstractInput
+from mycodo.inputs.sensorutils import calculate_dewpoint
+from mycodo.inputs.sensorutils import calculate_vapor_pressure_deficit
+from mycodo.utils.database import db_retrieve_table_daemon
+
+# Measurements
+measurements_dict = {
+    0: {
+        'measurement': 'temperature',
+        'unit': 'C'
+    },
+    1: {
+        'measurement': 'humidity',
+        'unit': 'percent'
+    },
+    2: {
+        'measurement': 'dewpoint',
+        'unit': 'C'
+    },
+    3: {
+        'measurement': 'vapor_pressure_deficit',
+        'unit': 'Pa'
+    }
+}
+
+# Input information
+INPUT_INFORMATION = {
+    'input_name_unique': 'HTU21D',
+    'input_manufacturer': 'Measurement Specialties',
+    'input_name': 'HTU21D',
+    'measurements_name': 'Humidity/Temperature',
+    'measurements_dict': measurements_dict,
+
+    'options_enabled': [
+        'i2c_location',
+        'measurements_select',
+        'period',
+        'pre_output'
+    ],
+    'options_disabled': ['interface'],
+
+    'dependencies_module': [
+        ('internal', 'file-exists /opt/mycodo/pigpio_installed', 'pigpio')
+    ],
+
+    'interfaces': ['I2C'],
+    'i2c_location': ['0x40'],
+    'i2c_address_editable': False
+}
 
 
-class HTU21DSensor(AbstractInput):
+class InputModule(AbstractInput):
     """
     A sensor support class that measures the HTU21D's humidity and temperature
     and calculates the dew point
@@ -36,78 +83,29 @@ class HTU21DSensor(AbstractInput):
     """
 
     def __init__(self, input_dev, testing=False):
-        super(HTU21DSensor, self).__init__()
+        super(InputModule, self).__init__()
         self.logger = logging.getLogger("mycodo.inputs.htu21d")
-        self._dew_point = None
-        self._humidity = None
-        self._temperature = None
 
         if not testing:
             import pigpio
             self.logger = logging.getLogger(
-                "mycodo.inputs.htu21d_{id}".format(id=input_dev.id))
+                "mycodo.htu21d_{id}".format(id=input_dev.unique_id.split('-')[0]))
+
+            self.device_measurements = db_retrieve_table_daemon(
+                DeviceMeasurements).filter(
+                    DeviceMeasurements.device_id == input_dev.unique_id)
+
             self.i2c_bus = input_dev.i2c_bus
             self.i2c_address = 0x40  # HTU21D-F Address
-            self.convert_to_unit = input_dev.convert_to_unit
             self.pi = pigpio.pi()
-
-    def __repr__(self):
-        """  Representation of object """
-        return "<{cls}(dewpoint={dpt})(humidity={hum})(temperature={temp})>".format(
-            cls=type(self).__name__,
-            dpt="{0:.2f}".format(self._dew_point),
-            hum="{0:.2f}".format(self._humidity),
-            temp="{0:.2f}".format(self._temperature))
-
-    def __str__(self):
-        """ Return measurement information """
-        return "Dew Point: {dpt}, Humidity: {hum}, Temperature: {temp}".format(
-            dpt="{0:.2f}".format(self._dew_point),
-            hum="{0:.2f}".format(self._humidity),
-            temp="{0:.2f}".format(self._temperature))
-
-    def __iter__(self):  # must return an iterator
-        """ HTU21DSensor iterates through live measurement readings """
-        return self
-
-    def next(self):
-        """ Get next measurement reading """
-        if self.read():  # raised an error
-            raise StopIteration  # required
-        return dict(dewpoint=float('{0:.2f}'.format(self._dew_point)),
-                    humidity=float('{0:.2f}'.format(self._humidity)),
-                    temperature=float('{0:.2f}'.format(self._temperature)))
-
-    @property
-    def dew_point(self):
-        """ HTU21D dew point in Celsius """
-        if self._dew_point is None:  # update if needed
-            self.read()
-        return self._dew_point
-
-    @property
-    def humidity(self):
-        """ HTU21D relative humidity in percent """
-        if self._humidity is None:  # update if needed
-            self.read()
-        return self._humidity
-
-    @property
-    def temperature(self):
-        """ HTU21D temperature in Celsius """
-        if self._temperature is None:  # update if needed
-            self.read()
-        return self._temperature
 
     def get_measurement(self):
         """ Gets the humidity and temperature """
-        self._dew_point = None
-        self._humidity = None
-        self._temperature = None
+        return_dict = measurements_dict.copy()
 
         if not self.pi.connected:  # Check if pigpiod is running
             self.logger.error("Could not connect to pigpiod."
-                         "Ensure it is running and try again.")
+                              "Ensure it is running and try again.")
             return None, None, None
 
         self.htu_reset()
@@ -138,34 +136,26 @@ class HTU21DSensor(AbstractInput):
         humi_reading = float(humi_reading)
         uncomp_humidity = ((humi_reading / 65536) * 125) - 6  # formula from datasheet
         humidity = ((25 - temperature) * -0.15) + uncomp_humidity
-        dew_pt = dewpoint(temperature, humidity)
 
-        # Check for conversions
-        dew_pt = convert_units(
-            'dewpoint', 'celsius', self.convert_to_unit, dew_pt)
-        temperature = convert_units(
-            'temperature', 'celsius', self.convert_to_unit, temperature)
+        if self.is_enabled(0):
+            return_dict[0]['value'] = temperature
 
-        return dew_pt, humidity, temperature
+        if self.is_enabled(1):
+            return_dict[1]['value'] = humidity
 
-    def read(self):
-        """
-        Takes a reading from the HTU21D and updates the self._humidity and
-        self._temperature values
+        if (self.is_enabled(2) and
+                self.is_enabled(0) and
+                self.is_enabled(1)):
+            return_dict[2]['value'] = calculate_dewpoint(
+                return_dict[0]['value'], return_dict[1]['value'])
 
-        :returns: None on success or 1 on error
-        """
-        try:
-            (self._dew_point,
-             self._humidity,
-             self._temperature) = self.get_measurement()
-            if self._dew_point is not None:
-                return  # success - no errors
-        except Exception as e:
-            self.logger.exception(
-                "{cls} raised an exception when taking a reading: "
-                "{err}".format(cls=type(self).__name__, err=e))
-        return 1
+        if (self.is_enabled(3) and
+                self.is_enabled(0) and
+                self.is_enabled(1)):
+            return_dict[3]['value'] = calculate_vapor_pressure_deficit(
+                return_dict[0]['value'], return_dict[1]['value'])
+
+        return return_dict
 
     def htu_reset(self):
         reset = 0xFE

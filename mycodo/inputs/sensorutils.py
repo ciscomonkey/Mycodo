@@ -8,12 +8,13 @@ import math
 
 import os
 
-from mycodo.config_devices_units import UNIT_CONVERSIONS
+from mycodo.databases.models import Conversion
+from mycodo.utils.database import db_retrieve_table_daemon
 
 logger = logging.getLogger("mycodo.sensor_utils")
 
 
-def altitude(pressure_pa, sea_level_pa=101325.0):
+def calculate_altitude(pressure_pa, sea_level_pa=101325.0):
     """
     Calculates the altitude (m) from pressure (Pa)
     :param pressure_pa: Measured pressure (Pa)
@@ -28,32 +29,34 @@ def altitude(pressure_pa, sea_level_pa=101325.0):
     return float("{:.3f}".format(alt_meters))
 
 
-def convert_units(measurement, unit, convert_to_unit, measure_value):
+def convert_units(conversion_id, measure_value):
     """
     Convert from one unit to another, such as ppm to ppb.
     See UNIT_CONVERSIONS in config_devices_units.py for available conversions.
 
-    :param measurement: measurement from MEASUREMENT_UNITS in config.py
-    :param unit: unit to convert from, from UNITS in config.py
-    :param convert_to_unit: unit to convert to, from UNITS in config.py
+    :param conversion_id: conversion ID
     :param measure_value: The value to convert
     :return: converted value
     """
-    measuement = measure_value
-    if convert_to_unit:
-        for each_unit in convert_to_unit.split(';'):
-            if each_unit.split(',')[0] == measurement:
-                conversion = unit + '_to_' + each_unit.split(',')[1]
-                if each_unit.split(',')[1] == unit:
-                    return measuement
-                elif conversion in UNIT_CONVERSIONS:
-                    replaced_str = UNIT_CONVERSIONS[conversion].replace('x', str(measuement))
-                    return float('{0:.5f}'.format(eval(replaced_str)))
-    return measuement
+    conversion = db_retrieve_table_daemon(Conversion, unique_id=conversion_id)
+    replaced_str = conversion.equation.replace('x', str(measure_value))
+    return float('{0:.5f}'.format(eval(replaced_str)))
 
 
-def dewpoint(t, rh):
-    """Calucalte dewpoint from temperature and relative humidity"""
+def convert_from_x_to_y_unit(unit_from, unit_to, in_value):
+    conversion = db_retrieve_table_daemon(Conversion)
+    conversion = conversion.filter(Conversion.convert_unit_from == unit_from)
+    conversion = conversion.filter(Conversion.convert_unit_to == unit_to).first()
+    if conversion:
+        replaced_str = conversion.equation.replace('x', str(in_value))
+        return float('{0:.5f}'.format(eval(replaced_str)))
+    else:
+        logger.error("Conversion not found for {uf} to {ut}".format(
+            uf=unit_to, ut=unit_from))
+
+
+def calculate_dewpoint(t, rh):
+    """Calculate dewpoint from temperature (Celsius) and relative humidity (percent)"""
     dict_tn = dict(water=243.12, ice=272.62)
     dict_m = dict(water=17.62, ice=22.46)
     if t >= 0:
@@ -68,6 +71,15 @@ def dewpoint(t, rh):
         return float(
             tn * (math.log(rh / 100.0) + (m * t) / (tn + t))
             / (m - math.log(rh / 100.0) - m * t / (tn + t)))
+
+
+def calculate_saturated_vapor_pressure(temperature):
+    return 610.7 * 10 ** (7.5 * temperature / (237.3 + temperature))
+
+
+def calculate_vapor_pressure_deficit(temperature, relative_humidity):
+    svp = calculate_saturated_vapor_pressure(temperature)
+    return ((100 - relative_humidity) / 100) * svp
 
 
 def is_device(path):

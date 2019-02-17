@@ -6,7 +6,6 @@
 from mock import patch, MagicMock
 patch.dict("sys.modules",
            RPi=MagicMock(),
-           imutils=MagicMock(),
            picamera=MagicMock(),
            AM2315=MagicMock(),
            tentacle_pi=MagicMock(),
@@ -14,7 +13,7 @@ patch.dict("sys.modules",
            Adafruit_TMP=MagicMock(),
            w1thermsensor=MagicMock(),
            sht_sensor=MagicMock(),
-           smbus=MagicMock(),
+           smbus2=MagicMock(),
            ).start()
 
 import pytest

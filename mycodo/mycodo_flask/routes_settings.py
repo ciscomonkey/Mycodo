@@ -12,18 +12,25 @@ from flask import url_for
 from flask.blueprints import Blueprint
 
 from mycodo.config import CAMERA_LIBRARIES
+from mycodo.config import INSTALL_DIRECTORY
 from mycodo.config import LANGUAGES
 from mycodo.config import THEMES
 from mycodo.databases.models import Camera
+from mycodo.databases.models import Conversion
+from mycodo.databases.models import Measurement
 from mycodo.databases.models import Misc
 from mycodo.databases.models import Output
 from mycodo.databases.models import Role
 from mycodo.databases.models import SMTP
+from mycodo.databases.models import Unit
 from mycodo.databases.models import User
 from mycodo.mycodo_flask.forms import forms_settings
 from mycodo.mycodo_flask.routes_static import inject_variables
 from mycodo.mycodo_flask.utils import utils_general
 from mycodo.mycodo_flask.utils import utils_settings
+from mycodo.utils.inputs import load_module_from_file
+from mycodo.utils.system_pi import add_custom_measurements
+from mycodo.utils.system_pi import add_custom_units
 from mycodo.utils.system_pi import cmd_output
 
 logger = logging.getLogger('mycodo.mycodo_flask.settings')
@@ -131,6 +138,127 @@ def settings_general():
                            form_settings_general=form_settings_general)
 
 
+@blueprint.route('/settings/input', methods=('GET', 'POST'))
+@flask_login.login_required
+def settings_input():
+    """ Display measurement settings """
+    if not utils_general.user_has_permission('view_settings'):
+        return redirect(url_for('routes_general.home'))
+
+    form_input = forms_settings.Input()
+    form_input_delete = forms_settings.InputDel()
+
+    dict_measurements = add_custom_measurements(Measurement.query.all())
+    dict_units = add_custom_units(Unit.query.all())
+
+    # Get list of custom inputs
+    excluded_files = ['__init__.py', '__pycache__']
+    install_dir = os.path.abspath(INSTALL_DIRECTORY)
+    path_custom_inputs = os.path.join(install_dir, 'mycodo/inputs/custom_inputs')
+
+    if request.method == 'POST':
+        if not utils_general.user_has_permission('edit_controllers'):
+            return redirect(url_for('routes_general.home'))
+
+        if form_input.import_input_upload.data:
+            utils_settings.settings_input_import(form_input)
+        elif form_input_delete.delete_input.data:
+            utils_settings.settings_input_delete(form_input_delete)
+
+        return redirect(url_for('routes_settings.settings_input'))
+
+    dict_inputs = {}
+
+    for each_file in os.listdir(path_custom_inputs):
+        if each_file not in excluded_files:
+            try:
+                full_path_file = os.path.join(path_custom_inputs, each_file)
+                input_info = load_module_from_file(full_path_file)
+                dict_inputs[input_info.INPUT_INFORMATION['input_name_unique']] = {}
+                dict_inputs[input_info.INPUT_INFORMATION['input_name_unique']]['input_name'] = \
+                    input_info.INPUT_INFORMATION['input_name']
+                dict_inputs[input_info.INPUT_INFORMATION['input_name_unique']]['input_manufacturer'] = \
+                    input_info.INPUT_INFORMATION['input_manufacturer']
+                dict_inputs[input_info.INPUT_INFORMATION['input_name_unique']]['measurements_name'] = \
+                    input_info.INPUT_INFORMATION['measurements_name']
+            except:
+                pass
+
+    # dict_inputs = parse_input_information()
+
+    return render_template('settings/input.html',
+                           dict_inputs=dict_inputs,
+                           dict_measurements=dict_measurements,
+                           dict_units=dict_units,
+                           form_input=form_input,
+                           form_input_delete=form_input_delete)
+
+
+@blueprint.route('/settings/measurement', methods=('GET', 'POST'))
+@flask_login.login_required
+def settings_measurement():
+    """ Display measurement settings """
+    if not utils_general.user_has_permission('view_settings'):
+        return redirect(url_for('routes_general.home'))
+
+    measurement = Measurement.query.all()
+    unit = Unit.query.all()
+    conversion = Conversion.query.all()
+    form_add_measurement = forms_settings.MeasurementAdd()
+    form_mod_measurement = forms_settings.MeasurementMod()
+    form_add_unit = forms_settings.UnitAdd()
+    form_mod_unit = forms_settings.UnitMod()
+    form_add_conversion = forms_settings.ConversionAdd()
+    form_mod_conversion = forms_settings.ConversionMod()
+
+    choices_units = utils_general.choices_units(unit)
+
+    # Generate all measurement and units used
+    dict_measurements = add_custom_measurements(measurement)
+    dict_units = add_custom_units(unit)
+
+    if request.method == 'POST':
+        if not utils_general.user_has_permission('edit_controllers'):
+            return redirect(url_for('routes_general.home'))
+
+        if form_add_measurement.add_measurement.data:
+            utils_settings.settings_measurement_add(form_add_measurement)
+        elif form_mod_measurement.save_measurement.data:
+            utils_settings.settings_measurement_mod(form_mod_measurement)
+        elif form_mod_measurement.delete_measurement.data:
+            utils_settings.settings_measurement_del(form_mod_measurement.measurement_id.data)
+
+        elif form_add_unit.add_unit.data:
+            utils_settings.settings_unit_add(form_add_unit)
+        elif form_mod_unit.save_unit.data:
+            utils_settings.settings_unit_mod(form_mod_unit)
+        elif form_mod_unit.delete_unit.data:
+            utils_settings.settings_unit_del(form_mod_unit.unit_id.data)
+
+        elif form_add_conversion.add_conversion.data:
+            utils_settings.settings_convert_add(form_add_conversion)
+        elif form_mod_conversion.save_conversion.data:
+            utils_settings.settings_convert_mod(form_mod_conversion)
+        elif form_mod_conversion.delete_conversion.data:
+            utils_settings.settings_convert_del(form_mod_conversion.conversion_id.data)
+
+        return redirect(url_for('routes_settings.settings_measurement'))
+
+    return render_template('settings/measurement.html',
+                           dict_measurements=dict_measurements,
+                           dict_units=dict_units,
+                           choices_units=choices_units,
+                           measurement=measurement,
+                           unit=unit,
+                           conversion=conversion,
+                           form_add_measurement=form_add_measurement,
+                           form_mod_measurement=form_mod_measurement,
+                           form_add_unit=form_add_unit,
+                           form_mod_unit=form_mod_unit,
+                           form_add_conversion=form_add_conversion,
+                           form_mod_conversion=form_mod_conversion)
+
+
 @blueprint.route('/settings/users', methods=('GET', 'POST'))
 @flask_login.login_required
 def settings_users():
@@ -169,6 +297,7 @@ def settings_users():
                            form_add_user=form_add_user,
                            form_mod_user=form_mod_user,
                            form_user_roles=form_user_roles)
+
 
 @blueprint.route('/settings/pi', methods=('GET', 'POST'))
 @flask_login.login_required
@@ -209,6 +338,43 @@ def settings_pi():
                            pi_settings=pi_settings,
                            pigpiod_sample_rate=pigpiod_sample_rate,
                            form_settings_pi=form_settings_pi)
+
+
+@blueprint.route('/settings/diagnostic', methods=('GET', 'POST'))
+@flask_login.login_required
+def settings_diagnostic():
+    """ Display general settings """
+    if not utils_general.user_has_permission('view_settings'):
+        return redirect(url_for('routes_general.home'))
+
+    form_settings_diagnostic = forms_settings.SettingsDiagnostic()
+
+    if request.method == 'POST':
+        if not utils_general.user_has_permission('edit_settings'):
+            return redirect(url_for('routes_general.home'))
+
+        if form_settings_diagnostic.delete_dashboard_elements.data:
+            utils_settings.settings_diagnostic_delete_dashboard_elements()
+        elif form_settings_diagnostic.delete_inputs.data:
+            utils_settings.settings_diagnostic_delete_inputs()
+        elif form_settings_diagnostic.delete_maths.data:
+            utils_settings.settings_diagnostic_delete_maths()
+        elif form_settings_diagnostic.delete_notes_tags.data:
+            utils_settings.settings_diagnostic_delete_notes_tags()
+        elif form_settings_diagnostic.delete_outputs.data:
+            utils_settings.settings_diagnostic_delete_outputs()
+        elif form_settings_diagnostic.delete_settings_database.data:
+            utils_settings.settings_diagnostic_delete_settings_database()
+        elif form_settings_diagnostic.delete_file_dependency.data:
+            utils_settings.settings_diagnostic_delete_file('dependency')
+        elif form_settings_diagnostic.delete_file_upgrade.data:
+            utils_settings.settings_diagnostic_delete_file('upgrade')
+
+        return redirect(url_for('routes_settings.settings_diagnostic'))
+
+    return render_template('settings/diagnostic.html',
+                           form_settings_diagnostic=form_settings_diagnostic)
+
 
 def get_raspi_config_settings():
     settings = {}

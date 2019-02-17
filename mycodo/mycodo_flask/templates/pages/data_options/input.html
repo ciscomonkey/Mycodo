@@ -1,9 +1,9 @@
 <h4>{{_('Input')}} <a href="/help#input" target="_blank"><span style="font-size: 16px" class="fas fa-question-circle"></span></a></h4>
-<p>{{_('Inputs, such as sensors, ADC signals, or even a response from a command, enable measuring conditions in the environment or elsewhere. Add, configure, and activate inputs to begin recording measurements to the database and allow them to be used throughout Mycodo.')}}</p>
 
-{%- if display_order_input -%}
-{%- for order in display_order_input -%}
-  {%- for each_input in input if each_input.unique_id == order -%}
+{% for each_order_input_id in display_order_input -%}
+  {%- set all_input = table_input.query.filter(table_input.unique_id == each_order_input_id).all() -%}
+  {%- if all_input -%}
+    {%- for each_input in all_input -%}
 
 <div class="container" style="border: 2px solid #ddd; border-radius: 5px;">
 
@@ -15,38 +15,38 @@
                   {% else -%}inactive-background
                   {% endif %} small-gutters" style="border-bottom: 1px solid #ddd; padding: 0.3em 0.2em 0.3em 0">
 
-    <div class="col-xs-2 col-sm-1 text-center icon-fh">
+    <div class="col-2 col-sm-1 text-center icon-fh">
       <a data-toggle="collapse" href="#collapseContainer-input-{{each_input.id}}" aria-expanded="false" aria-controls="collapseContainer{{each_input.id}}">
-        <span style="font-size: 3.5em" class="collapse-button{{each_input.id}} fa fa-plus-square"></span>
+        <span style="font-size: 3.6em" class="collapse-button{{each_input.id}} fa fa-plus-square"></span>
       </a>
     </div>
-    <div class="col-xs-5 col-sm-3">
-      {{form_mod_input.name(class_='form-control', value=each_input.name, **{'title':_('A name to distinguish this from others')})}}
+    <div class="col-5 col-sm-3">
+      {{form_mod_input.name(class_='form-control', value=each_input.name, **{'title': dict_translation['name']['phrase']})}}
     </div>
-    <div class="col-xs-5 col-sm-2">
-      <input class="form-control btn btn-default btn-block" disabled="" title="[{{'%02d' % each_input.id}}] UUID: {{each_input.unique_id}}" value="{% if each_input.device in device_info %}{{device_info[each_input.device]['name']}}{% endif %}" type="text">
+    <div class="col-5 col-sm-2">
+      <input class="form-control btn btn-sm btn-block" disabled="" title="[{{'%02d' % each_input.id}}] UUID: {{each_input.unique_id}}" value="{% if each_input.interface and each_input.interface not in ['RPi', 'Mycodo']%}[{{each_input.interface}}] {% endif %}{% if each_input.device in dict_inputs %}{{dict_inputs[each_input.device]['input_name']}}{% endif %}" type="text">
     </div>
-    <div class="col-xs-4 col-xs-offset-2 col-sm-2 col-sm-offset-0">
+    <div class="col-4 col-xs-offset-2 col-sm-2 col-sm-offset-0">
     {% if each_input.is_activated -%}
       {%- set has_active_pid = [] -%}
       {%- for each_pid in pid if each_pid.measurement.split(',')[0] == each_input.unique_id and each_pid.is_activated -%}
         {%- do has_active_pid.append(1) -%}
       {%- endfor -%}
       {% if has_active_pid -%}
-        {{form_mod_input.input_deactivate(class_='form-control btn btn-default btn-block',**{'onclick':'return confirm("There are currently active PID controllers that rely on this Input to be active. Select OK to deactivate this input and all associated PID controllers, otherwise click Cancel to leave them active.")'})}}
+        {{form_mod_input.input_deactivate(class_='form-control btn btn-sm',**{'onclick':'return confirm("There are currently active PID controllers that rely on this Input to be active. Select OK to deactivate this input and all associated PID controllers, otherwise click Cancel to leave them active.")'})}}
       {% else -%}
-        {{form_mod_input.input_deactivate(class_='form-control btn btn-default btn-block')}}
+        {{form_mod_input.input_deactivate(class_='form-control btn btn-sm')}}
       {% endif -%}
     {% else -%}
-      {{form_mod_input.input_activate(class_='form-control btn btn-default btn-block')}}
+      {{form_mod_input.input_activate(class_='form-control btn btn-sm')}}
     {% endif -%}
     </div>
 
-    <div class="col-xs-3 col-sm-2">
-      {{form_mod_input.input_order_up(class_='form-control btn btn-default btn-block')}}
+    <div class="col-4 col-sm-2">
+      {{form_mod_input.input_order_up(class_='form-control btn btn-sm btn-block')}}
     </div>
-    <div class="col-xs-3 col-sm-2">
-      {{form_mod_input.input_order_down(class_='form-control btn btn-default btn-block')}}
+    <div class="col-4 col-sm-2">
+      {{form_mod_input.input_order_down(class_='form-control btn btn-sm btn-block')}}
     </div>
 
   </div>
@@ -60,68 +60,155 @@
 
     <div class="row small-gutters" style="padding: 0.5em">
       <div class="col-auto small-gutters">
-        {{form_mod_input.input_mod(class_='form-control btn btn-default btn-block')}}
+        {{form_mod_input.input_mod(class_='form-control btn btn-sm btn-block')}}
       </div>
       <div class="col-auto small-gutters">
         {% if has_active_pid or has_active_lcd -%}
-          {{form_mod_input.input_delete(class_='form-control btn btn-default btn-block',**{'onclick':'return confirm("Note: there are currently an active PID that relies on this to operate. Deleting it will deactivate the PID. Are you sure you want to delete this?")'})}}
+          {{form_mod_input.input_delete(class_='form-control btn btn-sm btn-block',**{'onclick':'return confirm("Note: there are currently an active PID that relies on this to operate. Deleting it will deactivate the PID. Are you sure you want to delete this?")'})}}
         {% else -%}
-          {{form_mod_input.input_delete(class_='form-control btn btn-default btn-block',**{'onclick':'return confirm("Are you sure you want to delete this?")'})}}
+          {{form_mod_input.input_delete(class_='form-control btn btn-sm btn-block',**{'onclick':'return confirm("Are you sure you want to delete this?")'})}}
         {% endif -%}
+      </div>
+      <div class="col-auto small-gutters">
+        {{form_mod_input.input_acquire_measurements(class_='form-control btn btn-sm btn-block')}}
       </div>
     </div>
 
     <div class="row small-gutters" style="padding: 0.5em">
-      {% for each_input_templates in input_templates if each_input_templates[:-5] == each_input.device %}
-        {% include 'pages/data_options/input_options/'+each_input_templates %}
-      {% endfor %}
 
-      {% if each_input.device != 'EDGE' -%}
-        <div class="col-auto">
-          {{form_mod_input.period.label(class_='control-label')}}
-          <div>
-            {{form_mod_input.period(class_='form-control', value=each_input.period, **{'title':_('The duration (seconds) between input reads')})}}
-          </div>
-        </div>
-      {% endif -%}
+      {% if each_input.device in dict_inputs %}
+        {% include 'pages/data_options/input_options/TEMPLATE_OPTIONS_Interface.html' %}
+        {% include 'pages/data_options/input_options/TEMPLATE_OPTIONS_GPIO.html' %}
+        {% include 'pages/data_options/input_options/TEMPLATE_OPTIONS_BT.html' %}
+        {% include 'pages/data_options/input_options/TEMPLATE_OPTIONS_I2C.html' %}
+        {% include 'pages/data_options/input_options/TEMPLATE_OPTIONS_FTDI.html' %}
+        {% include 'pages/data_options/input_options/TEMPLATE_OPTIONS_UART.html' %}
+        {% include 'pages/data_options/input_options/TEMPLATE_OPTIONS_Baud_Rate.html' %}
 
-      {% if each_input.device not in ['EDGE', 'RPi', 'RPiCPULoad', 'RPiFreeSpace', 'MYCODO_RAM'] -%}
-        <div class="col-auto">
-          {{form_mod_input.pre_output_id.label(class_='control-label')}}
-          <div>
-            <select class="form-control form-tooltip form-dropdown" data-placement="top" id="pre_output_id" name="pre_output_id" title="{{_('Turn the selected output on before taking every measurement')}}.">
-              <option value="">Disabled</option>
-              {% for each_output in output if each_output.output_type not in ['pwm', 'command_pwm'] -%}
-                <option value="{{each_output.unique_id}}"{% if each_input.pre_output_id == each_output.unique_id %} selected{% endif %}>{{"[{0:02d}]".format(each_output.id)}} {{each_output.name}}</option>
-              {% endfor -%}
-            </select>
-          </div>
-        </div>
-        <div class="col-auto">
-          {{form_mod_input.pre_output_duration.label(class_='control-label')}}
-          <div>
-            {{form_mod_input.pre_output_duration(class_='form-control', value=each_input.pre_output_duration, **{'title':_('If a Pre Output is selected, set the duration (seconds) to turn the Pre Output on for before every measurement is acquired.')})}}
-          </div>
-        </div>
-        <div class="col-auto">
-          {{form_mod_input.pre_output_during_measure.label(class_='control-label')}}
-          <div class="input-group-text">
-            <input id="pre_output_during_measure" name="pre_output_during_measure" type="checkbox" value="y"{% if each_input.pre_output_during_measure %} checked{% endif %}>
-          </div>
-        </div>
-      {% endif -%}
+        {% include 'pages/data_options/input_options/TEMPLATE_OPTIONS_Location.html' %}
+
+        {% if each_input.device != 'EDGE' -%}
+          {% include 'pages/data_options/input_options/TEMPLATE_OPTIONS_Period.html' %}
+          {% include 'pages/data_options/input_options/TEMPLATE_OPTIONS_Pre_Output.html' %}
+        {% endif %}
+
+        {% include 'pages/data_options/input_options/TEMPLATE_OPTIONS_Custom_Options.html' %}
+
+        {% include 'pages/data_options/input_options/TEMPLATE_OPTIONS_Single_Input_Math.html' %}
+        {% include 'pages/data_options/input_options/TEMPLATE_OPTIONS_EDGE.html' %}
+
+        {% include 'pages/data_options/input_options/TEMPLATE_OPTIONS_Times_Check.html' %}
+        {% include 'pages/data_options/input_options/TEMPLATE_OPTIONS_Deadline.html' %}
+        {% include 'pages/data_options/input_options/TEMPLATE_OPTIONS_Port.html' %}
+
+        {% include 'pages/data_options/input_options/TEMPLATE_OPTIONS_RPM_Pulses_Rev.html' %}
+        {% include 'pages/data_options/input_options/TEMPLATE_OPTIONS_Weighting.html' %}
+        {% include 'pages/data_options/input_options/TEMPLATE_OPTIONS_Sample_Time.html' %}
+
+        {% include 'pages/data_options/input_options/TEMPLATE_OPTIONS_SHT_Voltage.html' %}
+        {% include 'pages/data_options/input_options/TEMPLATE_OPTIONS_Pin_Clock.html' %}
+
+        {% include 'pages/data_options/input_options/TEMPLATE_OPTIONS_Cmd_Command.html' %}
+
+        {% include 'pages/data_options/input_options/TEMPLATE_OPTIONS_Ref_Ohm.html' %}
+        {% include 'pages/data_options/input_options/TEMPLATE_OPTIONS_Thermocouple_Type.html' %}
+        {% include 'pages/data_options/input_options/TEMPLATE_OPTIONS_Resolution.html' %}
+        {% include 'pages/data_options/input_options/TEMPLATE_OPTIONS_Resolution_2.html' %}
+        {% include 'pages/data_options/input_options/TEMPLATE_OPTIONS_Sensitivity.html' %}
+
+        {% include 'pages/data_options/input_options/TEMPLATE_OPTIONS_Measurements_Select.html' %}
+
+        {% include 'pages/data_options/input_options/TEMPLATE_OPTIONS_ADC_Gain.html' %}
+        {% include 'pages/data_options/input_options/TEMPLATE_OPTIONS_ADC_Resolution.html' %}
+        {% include 'pages/data_options/input_options/TEMPLATE_OPTIONS_ADC_Sample_Speed.html' %}
+      {% endif %}
+
     </div>
 
     </form>
+
+    <div class="row small-gutters" style="border-bottom: 1px solid #ddd; padding: 0.5em">
+      <div class="col-12">
+        <h5>{{_('Measurement Settings')}}</h5>
+      </div>
+    </div>
+
+    {% include 'pages/data_options/input_options/TEMPLATE_OPTIONS_Measurements_Convert.html' %}
 
   </div> <!- collapse container end ->
 
 </div>
 
-{%- endfor -%}
-
 <div style="clear: both; padding-bottom: 0.5em;"></div>
 
+    {%- endfor -%}
+  {%- endif -%}
 {%- endfor -%}
+
+{%- if display_order_input -%}
+
+<div class="container">
+
+  <div class="form-inline" style="padding-bottom: 1em;">
+    <div class="form-group">
+      <a data-toggle="collapse" href="#collapseContainerReorderInput" aria-expanded="false" aria-controls="collapseContainerReorderInput" class="btn btn-sm btn-primary" role="button">{{dict_translation['input']['title'] + ' ' + dict_translation['reorder']['title']}}</a>
+    </div>
+  </div>
+
+  <div class="collapse" id="collapseContainerReorderInput" style="padding-bottom: 1em">
+
+    <form method="post" action="/data">
+    {{form_base.csrf_token}}
+
+    <div class="row" style="padding-bottom: 0.5em">
+      <div class="col-auto">
+        {{form_base.reorder(class_='btn btn-primary')}}
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="col-auto">
+      {{form_base.reorder_type(class_='form-control', value='input')}}
+        <select style="display: none" name="from[]" id="multiselect1" class="" size="8" multiple="multiple"></select>
+        <div>
+          <select name="list_visible_elements" id="multiselect1_to" class="form-control" size="8" multiple="multiple">
+          {% if display_order_input -%}
+            {% for each_visible in display_order_input if each_visible in names_input %}
+              <option value="{{each_visible}}">{{names_input[each_visible]}}</option>
+            {% endfor %}
+          {% endif %}
+          </select>
+          <div class="row">
+            <div class="col-sm-6">
+              <button type="button" id="multiselect1_move_up" class="btn btn-sm btn-block btn-primary"><i class="fa fa-arrow-up"></i></button>
+            </div>
+            <div class="col-sm-6">
+              <button type="button" id="multiselect1_move_down" class="btn btn-sm btn-block btn-primary"><i class="fa fa-arrow-down"></i></button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    </form>
+  </div>
+
+</div>
+
+<div style="clear: both; padding: 0.5em 0;"></div>
+
 {%- endif -%}
 
+<script type="text/javascript">
+jQuery(document).ready(function($) {
+    $('#multiselect1').multiselect({
+        sort: false,
+        keepRenderingSort: true
+    });
+});
+
+$('#collapseContainerReorderInput').on('shown.bs.collapse', function () {
+  this.scrollIntoView();
+});
+</script>

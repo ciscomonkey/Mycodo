@@ -1,12 +1,13 @@
-{% set graph_math_ids = each_graph.math_ids.split(';') %}
-{% set graph_output_ids = each_graph.output_ids.split(';') %}
-{% set graph_pid_ids = each_graph.pid_ids.split(';') %}
+{% set graph_math_ids = each_dashboard.math_ids.split(';') %}
+{% set graph_output_ids = each_dashboard.output_ids.split(';') %}
+{% set graph_pid_ids = each_dashboard.pid_ids.split(';') %}
+{% set graph_note_tag_ids = each_dashboard.note_tag_ids.split(';') %}
 
   chart_graph[{{chart_number}}] = new Highcharts.StockChart({
     chart : {
-      renderTo: 'container-graph-{{each_graph.unique_id}}',
+      renderTo: 'container-graph-{{each_dashboard.unique_id}}',
       zoomType: 'x',
-      alignTicks: {% if each_graph.enable_align_ticks %}true{% else %}false{% endif %},
+      alignTicks: {% if each_dashboard.enable_align_ticks %}true{% else %}false{% endif %},
       resetZoomButton: {
         theme: {
           display: 'none'
@@ -17,41 +18,63 @@
         load: function () {
           {% set count_series = [] -%}
 
-          {% for each_input in input -%}
-            {%- for each_id_and_measure in graph_input_ids if each_input.unique_id == each_id_and_measure.split(',')[0] %}
-          getPastData({{chart_number}}, {{count_series|count}}, '{{each_id_and_measure.split(',')[1]}}', '{{each_input.unique_id}}', {{each_graph.x_axis_duration*60}});
-          {% if each_graph.enable_auto_refresh %}
-          getLiveData({{chart_number}}, {{count_series|count}}, '{{each_id_and_measure.split(',')[1]}}', '{{each_input.unique_id}}', {{each_graph.x_axis_duration}}, {{each_graph.enable_xaxis_reset|int}}, {{each_graph.refresh_duration}}, {% if each_graph.enable_graph_shift %}true{% else %}false{% endif %});
-          {% endif %}
-              {%- do count_series.append(1) %}
-            {%- endfor -%}
+          {%- for input_and_measurement_ids in graph_input_ids -%}
+            {%- set input_id = input_and_measurement_ids.split(',')[0] -%}
+            {%- set measurement_id = input_and_measurement_ids.split(',')[1] -%}
+            {%- set all_input = table_input.query.filter(table_input.unique_id == input_id).all() -%}
+            {%- if all_input -%}
+              {% for each_input in all_input %}
+          getPastData({{chart_number}}, {{count_series|count}}, '{{each_input.unique_id}}', 'input', '{{measurement_id}}', {{each_dashboard.x_axis_duration*60}});
+                {% if each_dashboard.enable_auto_refresh -%}
+          getLiveData({{chart_number}}, {{count_series|count}}, '{{each_input.unique_id}}', 'input', '{{measurement_id}}', {{each_dashboard.x_axis_duration}}, {{each_dashboard.enable_xaxis_reset|int}}, {{each_dashboard.refresh_duration}}, {% if each_dashboard.enable_graph_shift %}true{% else %}false{% endif %});
+                {%- endif -%}
+                {%- do count_series.append(1) -%}
+              {%- endfor -%}
+            {%- endif -%}
           {%- endfor -%}
 
-          {% for each_math in math -%}
-            {%- for each_id_and_measure in graph_math_ids if each_math.unique_id == each_id_and_measure.split(',')[0] %}
-          getPastData({{chart_number}}, {{count_series|count}}, '{{each_id_and_measure.split(',')[1]}}', '{{each_math.unique_id}}', {{each_graph.x_axis_duration*60}});
-          {% if each_graph.enable_auto_refresh %}
-          getLiveData({{chart_number}}, {{count_series|count}}, '{{each_id_and_measure.split(',')[1]}}', '{{each_math.unique_id}}', {{each_graph.x_axis_duration}}, {{each_graph.enable_xaxis_reset|int}}, {{each_graph.refresh_duration}}, {% if each_graph.enable_graph_shift %}true{% else %}false{% endif %});
-          {% endif %}
-              {%- do count_series.append(1) %}
-            {%- endfor -%}
+          {%- for math_and_measurement_ids in graph_math_ids -%}
+            {%- set math_id = math_and_measurement_ids.split(',')[0] -%}
+            {%- set measurement_id = math_and_measurement_ids.split(',')[1] -%}
+            {%- set all_math = table_math.query.filter(table_math.unique_id == math_id).all() -%}
+            {%- if all_math -%}
+              {% for each_math in all_math %}
+          getPastData({{chart_number}}, {{count_series|count}}, '{{each_math.unique_id}}', 'math', '{{measurement_id}}', {{each_dashboard.x_axis_duration*60}});
+                {% if each_dashboard.enable_auto_refresh %}
+          getLiveData({{chart_number}}, {{count_series|count}}, '{{each_math.unique_id}}', 'math', '{{measurement_id}}', {{each_dashboard.x_axis_duration}}, {{each_dashboard.enable_xaxis_reset|int}}, {{each_dashboard.refresh_duration}}, {% if each_dashboard.enable_graph_shift %}true{% else %}false{% endif %});
+                {% endif %}
+                {%- do count_series.append(1) %}
+              {%- endfor -%}
+            {%- endif -%}
           {%- endfor -%}
 
           {%- for each_output in output -%}
             {%- for each_graph_output_id in graph_output_ids if each_output.unique_id == each_graph_output_id.split(',')[0] %}
-          getPastData({{chart_number}}, {{count_series|count}}, '{{each_graph_output_id.split(',')[1]}}', '{{each_output.unique_id}}', {{each_graph.x_axis_duration*60}});
-          {% if each_graph.enable_auto_refresh %}
-          getLiveData({{chart_number}}, {{count_series|count}}, '{{each_graph_output_id.split(',')[1]}}', '{{each_output.unique_id}}', {{each_graph.x_axis_duration}}, {{each_graph.enable_xaxis_reset|int}}, {{each_graph.refresh_duration}}, {% if each_graph.enable_graph_shift %}true{% else %}false{% endif %});
+          getPastData({{chart_number}}, {{count_series|count}}, '{{each_output.unique_id}}', 'output', '{{each_output.unique_id}}', {{each_dashboard.x_axis_duration*60}});
+          {% if each_dashboard.enable_auto_refresh %}
+          getLiveData({{chart_number}}, {{count_series|count}}, '{{each_output.unique_id}}', 'output', '{{each_output.unique_id}}', {{each_dashboard.x_axis_duration}}, {{each_dashboard.enable_xaxis_reset|int}}, {{each_dashboard.refresh_duration}}, {% if each_dashboard.enable_graph_shift %}true{% else %}false{% endif %});
           {% endif %}
               {%- do count_series.append(1) %}
             {%- endfor -%}
           {%- endfor -%}
 
           {%- for each_pid in pid -%}
-            {%- for each_id_and_measure in graph_pid_ids if each_pid.unique_id == each_id_and_measure.split(',')[0] %}
-          getPastData({{chart_number}}, {{count_series|count}}, '{{each_id_and_measure.split(',')[1]}}', '{{each_id_and_measure.split(',')[0]}}', {{each_graph.x_axis_duration*60}});
-          {% if each_graph.enable_auto_refresh %}
-          getLiveData({{chart_number}}, {{count_series|count}}, '{{each_id_and_measure.split(',')[1]}}', '{{each_id_and_measure.split(',')[0]}}', {{each_graph.x_axis_duration}}, {{each_graph.enable_xaxis_reset|int}}, {{each_graph.refresh_duration}}, {% if each_graph.enable_graph_shift %}true{% else %}false{% endif %});
+            {%- for pid_and_measurement_id in graph_pid_ids if each_pid.unique_id == pid_and_measurement_id.split(',')[0] %}
+              {%- set measurement_id = pid_and_measurement_id.split(',')[1] -%}
+          getPastData({{chart_number}}, {{count_series|count}}, '{{each_pid.unique_id}}', 'pid', '{{measurement_id}}', {{each_dashboard.x_axis_duration*60}});
+          {% if each_dashboard.enable_auto_refresh %}
+          getLiveData({{chart_number}}, {{count_series|count}}, '{{each_pid.unique_id}}', 'pid', '{{measurement_id}}', {{each_dashboard.x_axis_duration}}, {{each_dashboard.enable_xaxis_reset|int}}, {{each_dashboard.refresh_duration}}, {% if each_dashboard.enable_graph_shift %}true{% else %}false{% endif %});
+          {% endif %}
+              {%- do count_series.append(1) %}
+            {%- endfor -%}
+          {%- endfor -%}
+
+          {%- for each_tag in tags -%}
+            {%- for tag_and_measurement_id in graph_note_tag_ids if each_tag.unique_id == tag_and_measurement_id.split(',')[0] %}
+              {%- set measurement_id = tag_and_measurement_id.split(',')[1] -%}
+          getPastData({{chart_number}}, {{count_series|count}}, '{{each_tag.unique_id}}', 'tag', '{{measurement_id}}', {{each_dashboard.x_axis_duration*60}});
+          {% if each_dashboard.enable_auto_refresh %}
+          getLiveData({{chart_number}}, {{count_series|count}}, '{{each_tag.unique_id}}', 'tag', '{{measurement_id}}', {{each_dashboard.x_axis_duration}}, {{each_dashboard.enable_xaxis_reset|int}}, {{each_dashboard.refresh_duration}}, {% if each_dashboard.enable_graph_shift %}true{% else %}false{% endif %});
           {% endif %}
               {%- do count_series.append(1) %}
             {%- endfor -%}
@@ -59,15 +82,16 @@
         }
       }
     },
-    {% if each_graph.use_custom_colors and each_graph.custom_colors -%}
-      {% set color_list = each_graph.custom_colors.split(',') %}
-      colors: [{%- for each_color in color_list -%}
-                "{{each_color}}",
-               {%- endfor -%}],
-    {%- endif -%}
+  {% if each_dashboard.use_custom_colors and each_dashboard.custom_colors -%}
+    {% set color_list = each_dashboard.custom_colors.split(',') %}
+      colors: [
+    {%- for each_color in color_list -%}
+      "{{each_color}}",
+     {%- endfor -%}],
+  {%- endif -%}
 
     title: {
-      text: '{% if each_graph.enable_title %}{{each_graph.name}}{% endif %}'
+      text: '{% if each_dashboard.enable_title %}{{each_dashboard.name}}{% endif %}'
     },
 
     legend: {
@@ -80,35 +104,42 @@
     },
 
     yAxis: [
-    {% for each_axis_meas in y_axes[each_graph.unique_id] %}
+  {% for each_axis_meas in y_axes[each_dashboard.unique_id] if each_axis_meas in dict_units %}
       {
-        {% if each_graph.enable_manual_y_axis and
-             not (custom_yaxes[each_graph.unique_id][dict_measurements[each_axis_meas]['meas']]['minimum'] == '0' and
-                  custom_yaxes[each_graph.unique_id][dict_measurements[each_axis_meas]['meas']]['maximum'] == '0') %}
-        min: {{custom_yaxes[each_graph.unique_id][dict_measurements[each_axis_meas]['meas']]['minimum']}},
-        max: {{custom_yaxes[each_graph.unique_id][dict_measurements[each_axis_meas]['meas']]['maximum']}},
-        startOnTick: {% if each_graph.enable_start_on_tick %}true{% else %}false{% endif %},
-        endOnTick: {% if each_graph.enable_end_on_tick %}true{% else %}false{% endif %},
-        {% endif %}
+    {% if each_dashboard.enable_manual_y_axis and
+          custom_yaxes[each_dashboard.unique_id][each_axis_meas]['minimum'] != custom_yaxes[each_dashboard.unique_id][each_axis_meas]['maximum'] %}
+        min: {{custom_yaxes[each_dashboard.unique_id][each_axis_meas]['minimum']}},
+        max: {{custom_yaxes[each_dashboard.unique_id][each_axis_meas]['maximum']}},
+        startOnTick: {% if each_dashboard.enable_start_on_tick %}true{% else %}false{% endif %},
+        endOnTick: {% if each_dashboard.enable_end_on_tick %}true{% else %}false{% endif %},
+    {% endif %}
         title: {
-          text: '{% if dict_measurements[each_axis_meas]['name'] == 'Temperature' %}Celsius{% else %}{{dict_measurements[each_axis_meas]['name']}}{% endif %}{% if dict_measurements[each_axis_meas]['unit'] != '' %} ({{dict_measurements[each_axis_meas]['unit']}}){% endif %}'
+          text: '{{dict_units[each_axis_meas]['name']}}
+    {%- if dict_units[each_axis_meas]['unit'] != '' -%}
+      {{' (' + dict_units[each_axis_meas]['unit'] + ')'}}
+    {%- endif -%}'
         },
         labels: {
           format: '{value}'
         },
         opposite: false,
-          id: '{{dict_measurements[each_axis_meas]['meas']}}'
+        id: '
+    {%- if 'custom_axis_id' in dict_measurements[each_axis_meas] -%}
+      {{dict_measurements[each_axis_meas]['custom_axis_id']}}
+    {%- else -%}
+      {{each_axis_meas}}
+    {%- endif -%}'
       },
-    {% endfor %}
+  {% endfor %}
     ],
 
     exporting: {
-      enabled: {% if each_graph.enable_export %}true{% else %}false{% endif %},
+      enabled: {% if each_dashboard.enable_export %}true{% else %}false{% endif %},
       fallbackToExportServer: false,
     },
 
     navigator: {
-      enabled: {% if each_graph.enable_navbar %}true{% else %}false{% endif %}
+      enabled: {% if each_dashboard.enable_navbar %}true{% else %}false{% endif %}
     },
 
     scrollbar: {
@@ -116,7 +147,7 @@
     },
 
     rangeSelector: {
-      enabled: {% if each_graph.enable_rangeselect %}true{% else %}false{% endif %},
+      enabled: {% if each_dashboard.enable_rangeselect %}true{% else %}false{% endif %},
       buttons: [{
         count: 1,
         type: 'minute',
@@ -170,232 +201,275 @@
       text: "Mycodo"
     },
 
+    tooltip: {
+      shared: true,
+      formatter: function(){
+        var d = new Date(this.x);
+        if (this.point) {
+          return '<b>'+ Highcharts.dateFormat('%B %e, %Y %H:%M:%S.', this.x) + d.getMilliseconds()
+               + '</b><br/>' + this.series.name
+               + '<br/>' + this.point.title
+               + '<br/>' + this.point.text;
+        }
+        else {
+          var s = '<b>' + Highcharts.dateFormat('%B %e, %Y %H:%M:%S.', this.x) + d.getMilliseconds() + '</b>';
+          $.each(this.points, function(i, point) {
+              s += '<br/><span style="color:' + point.color + '">\u25CF</span> ' + point.series.name + ': ' + Highcharts.numberFormat(point.y, this.series.tooltipOptions.valueDecimals) + ' ' + this.series.tooltipOptions.valueSuffix;
+          });
+          return s;
+        }
+      }
+    },
+
+    plotOptions: {
+      column: {
+        maxPointWidth: 3  /* limit the maximum column width. */
+      }
+    },
+
+{#    // Generate  thermal image from pixel data#}
+{#    // point click event opens image in a new window#}
+{#    plotOptions: {#}
+{#      series: {#}
+{#        cursor: 'pointer',#}
+{#        point: {#}
+{#          events: {#}
+{#            click: function () {#}
+{#              URL = '/generate_thermal_image/f36ce034-3129-456d-b877-ff0d5587e375/' + this.x;#}
+{#              window.open(URL, "_blank");#}
+{#            }#}
+{#          }#}
+{#        }#}
+{#      }#}
+{#    },#}
+
+{#    plotOptions: {#}
+{#      series: {#}
+{#        cursor: 'pointer',#}
+{#        point: {#}
+{#          events: {#}
+{#            click: function(e){#}
+{#              hs.htmlExpand(null, {#}
+{#                pageOrigin: {#}
+{#                  x: e.pageX || e.clientX,#}
+{#                  y: e.pageY || e.clientY#}
+{#                },#}
+{#                headingText: this.series.name,#}
+{#                maincontentText: '<img src="/generate_thermal_image/f36ce034-3129-456d-b877-ff0d5587e375/' + this.x + '">',#}
+{#                width: 215,#}
+{#                height: 255,#}
+{#              });#}
+{#            }#}
+{#          }#}
+{#        },#}
+{#        marker: {#}
+{#          lineWidth: 1#}
+{#        }#}
+{#      }#}
+{#    },#}
+
     series: [
-    {% for each_input in input -%}
-      {%- for each_id_and_measure in graph_input_ids if each_input.unique_id == each_id_and_measure.split(',')[0] -%}
+  {%- for input_and_measurement_ids in graph_input_ids -%}
+    {%- set input_id = input_and_measurement_ids.split(',')[0] -%}
+    {%- set all_input = table_input.query.filter(table_input.unique_id == input_id).all() -%}
+    {%- if all_input -%}
+      {%- for each_input in all_input -%}
+        {%- set measurement_id = input_and_measurement_ids.split(',')[1] -%}
+        {%- if measurement_id in device_measurements_dict -%}
 
-        {% if each_input.device == 'LinuxCommand' %}
-          {
-            name: '{{each_input.name}} {{each_input.cmd_measurement}} ({{each_input.cmd_measurement_units}})',
-            type: 'line',
-            tooltip: {
-              valueSuffix: ' {{each_input.cmd_measurement_units}}',
-              valueDecimals: 3
-            },
-            yAxis: '{{each_input.cmd_measurement}}',
-            data: []
-          },
-        {% endif %}
+      {
+        name: '{{each_input.name}}
 
-        {%- for each_measurement in each_input.measurements.split(',') -%}
-          {%- if each_measurement == each_id_and_measure.split(',')[1] -%}
-            {
-              name: '{{each_input.name}} {{measurement_units[each_measurement]['name']}}{% if dict_measurements[each_measurement]['unit'] != '' %} (
-                {%- if use_unit[each_input.unique_id][each_measurement] -%}
-                  {{units[use_unit[each_input.unique_id][each_measurement]]['unit']}}
-                {%- else -%}
-                  {{measurement_units[each_measurement]['unit']}}
-                {%- endif -%}
-              ){%- endif -%}
+          {%- if device_measurements_dict[measurement_id].name -%}
+            {{' (' + device_measurements_dict[measurement_id].name}})
+          {%- endif -%}
+
+          {{' (CH' + (device_measurements_dict[measurement_id].channel + 1)|string}}
+
+          {%- if dict_measure_measurements[measurement_id] in dict_measurements and
+                 dict_measurements[dict_measure_measurements[measurement_id]]['name'] -%}
+            {{', ' + dict_measurements[dict_measure_measurements[measurement_id]]['name']}}
+          {%- endif -%}
+
+          {%- if dict_measure_units[measurement_id] in dict_units and
+                 dict_units[dict_measure_units[measurement_id]]['unit'] -%}
+            {{', ' + dict_units[dict_measure_units[measurement_id]]['unit']}}
+          {%- endif -%}
+
+          )',
+
+        {% if dict_measure_measurements[measurement_id] in dict_measurements and
+              dict_measurements[dict_measure_measurements[measurement_id]]['meas'] == 'edge' %}
+        type: 'column',
+        {% else -%}
+        type: 'line',
+        {%- endif -%}
+        tooltip: {
+          valueSuffix: '
+          {%- if device_measurements_dict[measurement_id].conversion_id -%}
+            {{' ' + dict_units[table_conversion.query.filter(table_conversion.unique_id == device_measurements_dict[measurement_id].conversion_id).first().convert_unit_to]['unit']}}
+          {%- elif device_measurements_dict[measurement_id].rescaled_unit -%}
+            {{' ' + dict_units[device_measurements_dict[measurement_id].rescaled_unit]['unit']}}
+          {%- else -%}
+            {{' ' + dict_units[device_measurements_dict[measurement_id].unit]['unit']}}
+          {%- endif -%}
+          ',
+          valueDecimals: 3
+        },
+        yAxis: '
+          {%- if measurement_id in dict_measure_units -%}
+            {{dict_measure_units[measurement_id]}}
+          {%- endif -%}
             ',
-              {% if measurement_units[each_measurement]['meas'] == 'edge' %}
-              type: 'column',
-              {% else %}
-              type: 'line',
-              {% endif %}
-              tooltip: {
-                valueSuffix: '
-                  {%- if use_unit[each_input.unique_id][each_measurement] -%}
-                    {{' ' + units[use_unit[each_input.unique_id][each_measurement]]['unit']}}
-                  {%- else -%}
-                    {{' ' + measurement_units[each_measurement]['unit']}}
-                  {%- endif -%}
-                  ',
-                valueDecimals: 3
-              },
-              yAxis: '
-                  {%- if use_unit[each_input.unique_id][each_measurement] -%}
-                    {{use_unit[each_input.unique_id][each_measurement]}}
-                  {%- else -%}
-                    {{measurement_units[each_measurement]['meas']}}
-                  {%- endif -%}
-              ',
-              data: []
-            },
-          {%- elif each_input.adc_measure == each_id_and_measure.split(',')[1] -%}
-            {
-              name: '{{each_input.name}} {{each_input.adc_measure}}',
-              type: 'line',
-              tooltip: {
-                valueSuffix: ' {{each_input.adc_measure_units}}',
-                valueDecimals: 3
-              },
-              yAxis: '{{each_input.adc_measure}}',
-              data: []
-            },
-          {%- endif -%}
-        {%- endfor -%}
-      {%- endfor -%}
-    {% endfor %}
+        data: []
+      },
 
-    {% for each_math in math -%}
-      {%- for each_id_and_measure in graph_math_ids if each_math.unique_id == each_id_and_measure.split(',')[0] -%}
-        {
-          name: '{{each_math.name}} {% if each_id_and_measure.split(',')[1] in measurement_units %}{{measurement_units[each_id_and_measure.split(',')[1]]['name']}} ({{measurement_units[each_id_and_measure.split(',')[1]]['unit']}}){% else %}{{each_id_and_measure.split(',')[1]}}{% endif %}',
-          type: 'line',
-          tooltip: {
-            {% if each_id_and_measure.split(',')[1] in measurement_units and measurement_units[each_id_and_measure.split(',')[1]]['meas'] == 'temperature' %}
-            pointFormatter: function () {
-              return '<span style="color:'+ this.series.color + '">\u25CF</span> ' + this.series.name + ': <b>' + Highcharts.numberFormat(this.y, 2) + '°C (' + Highcharts.numberFormat(((this.y*9/5)+32), 2) + '°F)</b><br>';
-            },
-            {% else %}
-            valueSuffix: ' {% if each_id_and_measure.split(',')[1] in measurement_units %}{{measurement_units[each_id_and_measure.split(',')[1]]['unit']}}{% else %}{{each_math.measure_units}}{% endif %}',
-            valueDecimals: 3
-            {% endif %}
-          },
-          yAxis: '{{each_id_and_measure.split(',')[1]}}',
-          data: []
-        },
+        {%- endif -%}
       {%- endfor -%}
-    {% endfor %}
+    {%- endif -%}
+  {%- endfor -%}
 
-    {%- for each_output in output -%}
-      {%- for each_graph_output_id in graph_output_ids if each_output.unique_id == each_graph_output_id.split(',')[0] -%}
-        {% if each_graph_output_id.split(',')[1] == 'duration_sec' %}
-        {
-          name: '{{each_output.name}} {{_('Duration')}} (sec)',
-          type: 'column',
-          dataGrouping: {
-            approximation: 'low',
-            groupPixelWidth: 3
-          },
-          tooltip: {
-            valueSuffix: ' sec',
-            valueDecimals: 2
-          },
-          yAxis: 'duration_sec',
-          data: []
-        },
-        {% elif each_graph_output_id.split(',')[1] == 'duty_cycle' %}
-        {
-          name: '{{each_output.name}} {{_('Duty Cycle')}} (%)',
-          type: 'column',
-          dataGrouping: {
-            approximation: 'low',
-            groupPixelWidth: 3
-          },
-          tooltip: {
-            valueSuffix: ' %',
-            valueDecimals: 2
-          },
-          yAxis: 'duty_cycle',
-          data: []
-        },
-        {% endif %}
-      {%- endfor -%}
+  {% for each_math in math -%}
+    {%- for math_and_measurement_ids in graph_math_ids if each_math.unique_id == math_and_measurement_ids.split(',')[0] -%}
+
+      {%- set measurement_id = math_and_measurement_ids.split(',')[1] -%}
+      {%- if measurement_id in device_measurements_dict -%}
+
+      {
+      name: '{{each_math.name}}
+
+        {%- if device_measurements_dict[measurement_id].name -%}
+          {{' (' + device_measurements_dict[measurement_id].name}})
+        {%- endif -%}
+
+          {{' (CH' + (device_measurements_dict[measurement_id].channel + 1)|string}}
+
+        {%- if dict_measure_measurements[measurement_id] in dict_measurements and
+               dict_measurements[dict_measure_measurements[measurement_id]]['name'] -%}
+          {{', ' + dict_measurements[dict_measure_measurements[measurement_id]]['name']}}
+        {%- endif -%}
+
+        {%- if dict_measure_units[measurement_id] in dict_units and
+               dict_units[dict_measure_units[measurement_id]]['unit'] -%}
+          {{', ' + dict_units[dict_measure_units[measurement_id]]['unit']}}
+        {%- endif -%}
+
+        )',
+
+      {% if dict_measure_measurements[measurement_id] in dict_measurements and
+            dict_measurements[dict_measure_measurements[measurement_id]]['meas'] == 'edge' %}
+      type: 'column',
+      {% else %}
+      type: 'line',
+      {% endif %}
+      tooltip: {
+        valueSuffix: '
+        {%- if device_measurements_dict[measurement_id].conversion_id -%}
+          {{' ' + dict_units[table_conversion.query.filter(table_conversion.unique_id == device_measurements_dict[measurement_id].conversion_id).first().convert_unit_to]['unit']}}
+        {%- elif device_measurements_dict[measurement_id].rescaled_unit -%}
+          {{' ' + dict_units[device_measurements_dict[measurement_id].rescaled_unit]['unit']}}
+        {%- else -%}
+          {{' ' + dict_units[device_measurements_dict[measurement_id].unit]['unit']}}
+        {%- endif -%}
+        ',
+        valueDecimals: 3
+      },
+      yAxis: '
+        {%- if measurement_id in dict_measure_units -%}
+          {{dict_measure_units[measurement_id]}}
+        {%- endif -%}
+          ',
+      data: []
+    },
+
+      {%- endif -%}
+
     {%- endfor -%}
+  {% endfor %}
 
-    {%- for each_pid in pid -%}
-      {%- for each_graph_pid_id in graph_pid_ids if each_pid.unique_id == each_graph_pid_id.split(',')[0] -%}
-        {% if each_graph_pid_id.split(',')[1] in ['setpoint', 'setpoint_band_min', 'setpoint_band_max'] and each_pid.measurement %}
-        {
-          name: '{{each_pid.name}}
-          {%- if each_graph_pid_id.split(',')[1] == 'setpoint' -%}
-            {{' '+_('Setpoint')}}
-          {%- elif each_graph_pid_id.split(',')[1] == 'setpoint_band_min' -%}
-            {{' '+_('Band Min')}}
-          {%- elif each_graph_pid_id.split(',')[1] == 'setpoint_band_max' -%}
-            {{' '+_('Band Max')}}
-          {%- endif -%}
-          ',
-          type: 'line',
-          tooltip: {
-            valueSuffix: '
-          {%- for each_input in input if each_pid.measurement.split(',')[0] == each_input.unique_id -%}
-            {%- if use_unit[each_input.unique_id][each_pid.measurement.split(',')[1]] -%}
-              {{' ' + units[use_unit[each_input.unique_id][each_pid.measurement.split(',')[1]]]['unit']}}
-            {%- else -%}
-              {%- if each_pid.measurement.split(',')[1] in measurement_units -%}
-                {{' ' + measurement_units[each_pid.measurement.split(',')[1]]['unit']|safe}}
-              {%- else -%}
-                {%- for each_input in input if each_pid.measurement.split(',')[0] == each_input.unique_id and each_input.device == 'LinuxCommand' -%}
-                  {{' ' + each_input.cmd_measurement_units}}
-                {%- endfor -%}
-              {%- endif -%}
-            {%- endif -%}
-          {%- endfor -%}
-          ',
-            valueDecimals: 2
-          },
-          yAxis: '
-          {%- for each_input in input if each_pid.measurement.split(',')[0] == each_input.unique_id -%}
-            {%- if use_unit[each_input.unique_id][each_pid.measurement.split(',')[1]] -%}
-              {{use_unit[each_input.unique_id][each_pid.measurement.split(',')[1]]}}
-            {%- else -%}
-              {{each_pid.measurement.split(',')[1]}}
-            {%- endif -%}
-          {%- endfor -%}
-          ',
-          data: []
+  {%- for each_output in output -%}
+    {%- for each_graph_output_id in graph_output_ids if each_output.unique_id == each_graph_output_id.split(',')[0] -%}
+      {
+        name: '{{each_output.name}} ({{dict_measurements[each_output.measurement]['name']}})',
+        type: 'column',
+        dataGrouping: {
+          approximation: 'high',
+          groupPixelWidth: 1
         },
-        {% elif each_graph_pid_id.split(',')[1] == 'pid_p_value' %}
-        {
-          name: '{{each_pid.name}} P-Value',
-          type: 'line',
-          tooltip: {
-            valueSuffix: '',
-            valueDecimals: 2
-          },
-          yAxis: 'pid_value',
-          data: []
+        tooltip: {
+          valueSuffix: ' {{dict_units[each_output.unit]['unit']}}',
+          valueDecimals: 2
         },
-        {% elif each_graph_pid_id.split(',')[1] == 'pid_i_value' %}
-        {
-          name: '{{each_pid.name}} I-Value',
-          type: 'line',
-          tooltip: {
-            valueSuffix: '',
-            valueDecimals: 2
-          },
-          yAxis: 'pid_value',
-          data: []
-        },
-        {% elif each_graph_pid_id.split(',')[1] == 'pid_d_value' %}
-        {
-          name: '{{each_pid.name}} D-Value',
-          type: 'line',
-          tooltip: {
-            valueSuffix: '',
-            valueDecimals: 2
-          },
-          yAxis: 'pid_value',
-          data: []
-        },
-        {% elif each_graph_pid_id.split(',')[1] == 'duration_sec' %}
-        {
-          name: '{{each_pid.name}} {{_('Output')}} {{_('Duration')}}',
-          type: 'line',
-          tooltip: {
-            valueSuffix: ' sec',
-            valueDecimals: 2
-          },
-          yAxis: 'duration_sec',
-          data: []
-        },
-        {% elif each_graph_pid_id.split(',')[1] == 'duty_cycle' %}
-        {
-          name: '{{each_pid.name}} {{_('Output')}} {{_('Duty Cycle')}} (%)',
-          type: 'line',
-          tooltip: {
-            valueSuffix: ' %',
-            valueDecimals: 2
-          },
-          yAxis: 'duty_cycle',
-          data: []
-        },
-        {% endif %}
-      {%- endfor -%}
+        yAxis: '{{each_output.unit}}',
+        data: []
+      },
     {%- endfor -%}
+  {%- endfor -%}
+
+  {%- for each_pid in pid -%}
+    {%- for pid_and_measurement_ids in graph_pid_ids if each_pid.unique_id == pid_and_measurement_ids.split(',')[0] -%}
+      {%- set measurement_id = pid_and_measurement_ids.split(',')[1] -%}
+      {%- if measurement_id in device_measurements_dict -%}
+
+    {
+      name: '{{each_pid.name}}
+
+        {%- if device_measurements_dict[measurement_id].name -%}
+          {{' (' + device_measurements_dict[measurement_id].name}})
+        {%- endif -%}
+
+          {{' (CH' + (device_measurements_dict[measurement_id].channel + 1)|string}}
+
+        {%- if dict_measure_measurements[measurement_id] in dict_measurements and
+               dict_measurements[dict_measure_measurements[measurement_id]]['name'] -%}
+          {{', ' + dict_measurements[dict_measure_measurements[measurement_id]]['name']}}
+        {%- endif -%}
+
+        {%- if dict_measure_units[measurement_id] in dict_units and
+               dict_units[dict_measure_units[measurement_id]]['unit'] -%}
+          {{', ' + dict_units[dict_measure_units[measurement_id]]['unit']}}
+        {%- endif -%}
+
+        )',
+
+      {% if dict_measure_measurements[measurement_id] in dict_measurements and
+            dict_measurements[dict_measure_measurements[measurement_id]]['meas'] == 'edge' %}
+      type: 'column',
+      {% else %}
+      type: 'line',
+      {% endif %}
+      tooltip: {
+        valueSuffix: '
+        {%- if measurement_id in dict_measure_units and dict_measure_units[measurement_id] in dict_units -%}
+          {{' ' + dict_units[dict_measure_units[measurement_id]]['unit']}}
+        {%- endif -%}
+        ',
+        valueDecimals: 3
+      },
+      yAxis: '
+        {%- if measurement_id in dict_measure_units -%}
+          {{dict_measure_units[measurement_id]}}
+        {%- endif -%}
+          ',
+      data: []
+    },
+
+      {%- endif -%}
+    {%- endfor -%}
+  {% endfor %}
+
+  {%- for each_tag in tags -%}
+    {%- for each_graph_note_tag_id in graph_note_tag_ids if each_tag.unique_id == each_graph_note_tag_id.split(',')[0] -%}
+      {
+        name: 'Note Tag: {{each_tag.name}}',
+        type: 'flags',
+        data: [],
+        stackDistance: 40,
+        shape: 'squarepin'
+      },
+    {% endfor %}
+  {% endfor %}
+
     ]
   });
 
@@ -403,41 +477,52 @@
     {% set count_series = [] -%}
 
     {% for each_input in input -%}
-      {%- for each_id_and_measure in graph_input_ids if each_input.unique_id == each_id_and_measure.split(',')[0] %}
-    retrieveLiveData({{chart_number}}, {{count_series|count}}, '{{each_id_and_measure.split(',')[1]}}', '{{each_input.unique_id}}', {{each_graph.x_axis_duration}}, {{each_graph.enable_xaxis_reset|int}}, {{each_graph.refresh_duration}}, {% if each_graph.enable_graph_shift %}true{% else %}false{% endif %});
+      {%- for input_and_measurement_ids in graph_input_ids if each_input.unique_id == input_and_measurement_ids.split(',')[0] %}
+        {%- set measurement_id = input_and_measurement_ids.split(',')[1] -%}
+    retrieveLiveData({{chart_number}}, {{count_series|count}}, '{{each_input.unique_id}}', 'input', '{{measurement_id}}', {{each_dashboard.x_axis_duration}}, {{each_dashboard.enable_xaxis_reset|int}}, {{each_dashboard.refresh_duration}}, {% if each_dashboard.enable_graph_shift %}true{% else %}false{% endif %});
         {%- do count_series.append(1) %}
       {%- endfor -%}
     {%- endfor -%}
 
     {% for each_math in math -%}
-      {%- for each_id_and_measure in graph_math_ids if each_math.unique_id == each_id_and_measure.split(',')[0] %}
-    retrieveLiveData({{chart_number}}, {{count_series|count}}, '{{each_id_and_measure.split(',')[1]}}', '{{each_math.unique_id}}', {{each_graph.x_axis_duration}}, {{each_graph.enable_xaxis_reset|int}}, {{each_graph.refresh_duration}}, {% if each_graph.enable_graph_shift %}true{% else %}false{% endif %});
+      {%- for math_and_measurement_id in graph_math_ids if each_math.unique_id == math_and_measurement_id.split(',')[0] %}
+        {%- set measurement_id = math_and_measurement_id.split(',')[1] -%}
+    retrieveLiveData({{chart_number}}, {{count_series|count}}, '{{each_math.unique_id}}', 'math', '{{measurement_id}}', {{each_dashboard.x_axis_duration}}, {{each_dashboard.enable_xaxis_reset|int}}, {{each_dashboard.refresh_duration}}, {% if each_dashboard.enable_graph_shift %}true{% else %}false{% endif %});
         {%- do count_series.append(1) %}
       {%- endfor -%}
     {%- endfor -%}
 
-    {%- for each_output in output -%}
-      {%- for each_graph_output_id in graph_output_ids if each_output.unique_id == each_graph_output_id.split(',')[0] %}
-    retrieveLiveData({{chart_number}}, {{count_series|count}}, '{{each_graph_output_id.split(',')[1]}}', '{{each_output.unique_id}}', {{each_graph.x_axis_duration}}, {{each_graph.enable_xaxis_reset|int}}, {{each_graph.refresh_duration}}, {% if each_graph.enable_graph_shift %}true{% else %}false{% endif %});
+    {% for each_output in output -%}
+      {%- for output_and_measurement_id in graph_output_ids if each_output.unique_id == output_and_measurement_id.split(',')[0] %}
+        {%- set measurement_id = output_and_measurement_id.split(',')[0] -%}
+    retrieveLiveData({{chart_number}}, {{count_series|count}}, '{{each_output.unique_id}}', 'output', '{{each_output.unique_id}}', {{each_dashboard.x_axis_duration}}, {{each_dashboard.enable_xaxis_reset|int}}, {{each_dashboard.refresh_duration}}, {% if each_dashboard.enable_graph_shift %}true{% else %}false{% endif %});
         {%- do count_series.append(1) %}
       {%- endfor -%}
     {%- endfor -%}
 
-    {%- for each_pid in pid -%}
-      {%- for each_id_and_measure in graph_pid_ids if each_pid.unique_id == each_id_and_measure.split(',')[0] %}
-    retrieveLiveData({{chart_number}}, {{count_series|count}}, '{{each_id_and_measure.split(',')[1]}}', '{{each_id_and_measure.split(',')[0]}}', {{each_graph.x_axis_duration}}, {{each_graph.enable_xaxis_reset|int}}, {{each_graph.refresh_duration}}, {% if each_graph.enable_graph_shift %}true{% else %}false{% endif %});
+    {% for each_pid in pid -%}
+      {%- for pid_and_measurement_id in graph_pid_ids if each_pid.unique_id == pid_and_measurement_id.split(',')[0] %}
+        {%- set measurement_id = pid_and_measurement_id.split(',')[1] -%}
+    retrieveLiveData({{chart_number}}, {{count_series|count}}, '{{each_pid.unique_id}}', 'pid', '{{measurement_id}}', {{each_dashboard.x_axis_duration}}, {{each_dashboard.enable_xaxis_reset|int}}, {{each_dashboard.refresh_duration}}, {% if each_dashboard.enable_graph_shift %}true{% else %}false{% endif %});
+        {%- do count_series.append(1) %}
+      {%- endfor -%}
+    {%- endfor -%}
+
+    {%- for each_tag in tag -%}
+      {%- for each_id_and_measure in graph_note_tag_ids if each_pid.unique_id == each_id_and_measure.split(',')[0] %}
+    retrieveLiveData({{chart_number}}, {{count_series|count}}, '{{each_id_and_measure.split(',')[1]}}', '{{each_id_and_measure.split(',')[0]}}', {{each_dashboard.x_axis_duration}}, {{each_dashboard.enable_xaxis_reset|int}}, {{each_dashboard.refresh_duration}}, {% if each_dashboard.enable_graph_shift %}true{% else %}false{% endif %});
         {%- do count_series.append(1) %}
       {%- endfor -%}
     {%- endfor -%}
   });
 
   $('#resetZoom{{chart_number}}').click(function() {
-    var chart = $('#container-graph-{{each_graph.unique_id}}').highcharts();
+    var chart = $('#container-graph-{{each_dashboard.unique_id}}').highcharts();
     chart.zoomOut();
   });
 
   $('#showhidebutton{{chart_number}}').click(function() {
-    var chart = $('#container-graph-{{each_graph.unique_id}}').highcharts();
+    var chart = $('#container-graph-{{each_dashboard.unique_id}}').highcharts();
     var series = chart.series[0];
     if (series.visible) {
       $(chart.series).each(function(){

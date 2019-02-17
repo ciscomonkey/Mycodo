@@ -16,22 +16,28 @@ class Input(CRUDMixin, db.Model):
     preset_name = db.Column(db.Text, default=None)  # Name for preset
     device = db.Column(db.Text, default='')  # Device name, such as DHT11, DHT22, DS18B20
     interface = db.Column(db.Text, default=None)  # Communication interface (I2C, UART, etc.)
-    device_loc = db.Column(db.Text, default=None)  # Device location for UART communication
-    calibrate_sensor_measure = db.Column(db.Text, default=None)  # sensor ID and measurement (CSV)
-    baud_rate = db.Column(db.Integer, default=None)  # Baud rate for UART communication
     period = db.Column(db.Float, default=15.0)  # Duration between readings
-    i2c_bus = db.Column(db.Integer, default='')  # I2C bus the sensor is connected to
-    location = db.Column(db.Text, default='')  # GPIO pin or i2c address to communicate with sensor
     power_output_id = db.Column(db.String, default=None)
-    measurements = db.Column(db.Text, default='')  # Measurements separated by commas
     resolution = db.Column(db.Integer, default=0)
     resolution_2 = db.Column(db.Integer, default=0)
     sensitivity = db.Column(db.Integer, default=0)
     thermocouple_type = db.Column(db.Text, default=None)
     ref_ohm = db.Column(db.Integer, default=None)
-    convert_to_unit = db.Column(db.Text, default='')
+    calibrate_sensor_measure = db.Column(db.Text, default=None)  # sensor ID and measurement (CSV)
+
+    location = db.Column(db.Text, default='')  # GPIO pin or i2c address to communicate with sensor
+    gpio_location = db.Column(db.Integer, default=None)  # Pin location for GPIO communication
+
+    # I2C
+    i2c_location = db.Column(db.Text, default=None)  # Address location for I2C communication
+    i2c_bus = db.Column(db.Integer, default='')  # I2C bus the sensor is connected to
+
+    # FTDI
+    ftdi_location = db.Column(db.Text, default=None)  # Device location for FTDI communication
 
     # Communication (SPI)
+    uart_location = db.Column(db.Text, default=None)  # Device location for UART communication
+    baud_rate = db.Column(db.Integer, default=None)  # Baud rate for UART communication
     pin_clock = db.Column(db.Integer, default=None)
     pin_cs = db.Column(db.Integer, default=None)
     pin_mosi = db.Column(db.Integer, default=None)
@@ -54,21 +60,12 @@ class Input(CRUDMixin, db.Model):
     sht_voltage = db.Column(db.Text, default='3.5')
 
     # Analog to digital converter options
-    adc_channel = db.Column(db.Integer, default=0)
     adc_gain = db.Column(db.Integer, default=1)
     adc_resolution = db.Column(db.Integer, default=18)
-    adc_measure = db.Column(db.Text, default=None)
-    adc_measure_units = db.Column(db.Text, default=None)
-    adc_volts_min = db.Column(db.Float, default=None)
-    adc_volts_max = db.Column(db.Float, default=None)
-    adc_units_min = db.Column(db.Float, default=0.0)
-    adc_units_max = db.Column(db.Float, default=10)
-    adc_inverse_unit_scale = db.Column(db.Boolean, default=False)
+    adc_sample_speed = db.Column(db.Text, default='')
 
     # Command options
     cmd_command = db.Column(db.Text, default=None)
-    cmd_measurement = db.Column(db.Text, default=None)
-    cmd_measurement_units = db.Column(db.Text, default=None)
 
     # PWM and RPM options
     weighting = db.Column(db.Float, default=0.0)
@@ -79,6 +76,8 @@ class Input(CRUDMixin, db.Model):
     port = db.Column(db.Integer, default=80)
     times_check = db.Column(db.Integer, default=1)
     deadline = db.Column(db.Integer, default=2)
+
+    custom_options = db.Column(db.Text, default='')
 
     def is_active(self):
         """

@@ -25,90 +25,88 @@ import logging
 import math
 import time
 
-from .base_input import AbstractInput
-from .sensorutils import convert_units
+from mycodo.inputs.base_input import AbstractInput
 
 # import numpy  # Used for more accurate temperature calculation
 
+# Measurements
+measurements_dict = {
+    0: {
+        'measurement': 'temperature',
+        'unit': 'C'
+    }
+}
 
-class MAX31865Sensor(AbstractInput):
+# Input information
+INPUT_INFORMATION = {
+    'input_name_unique': 'MAX31865',
+    'input_manufacturer': 'MAXIM',
+    'input_name': 'MAX31865',
+    'measurements_name': 'Temperature',
+    'measurements_dict': measurements_dict,
+
+    'options_enabled': [
+        'thermocouple_type',
+        'pin_cs',
+        'pin_miso',
+        'pin_mosi',
+        'pin_clock',
+        'ref_ohm',
+        'period',
+        'pre_output'
+    ],
+    'options_disabled': ['interface'],
+
+    'dependencies_module': [
+        ('pip-pypi', 'RPi.GPIO', 'RPi.GPIO')
+    ],
+
+    'interfaces': ['UART'],
+    'pin_cs': 8,
+    'pin_miso': 9,
+    'pin_mosi': 10,
+    'pin_clock': 11,
+    'thermocouple_type': [
+        ('PT100', 'PT-100'),
+        ('PT1000', 'PT-1000')
+    ],
+    'ref_ohm': 0
+}
+
+
+class InputModule(AbstractInput):
     """
     A sensor support class that measures the MAX31865's temperature
 
     """
 
     def __init__(self, input_dev, testing=False):
-        super(MAX31865Sensor, self).__init__()
+        super(InputModule, self).__init__()
         self.logger = logging.getLogger("mycodo.inputs.max31865")
-        self._temperature = None
 
         if not testing:
             self.logger = logging.getLogger(
-                "mycodo.inputs.max31865_{id}".format(id=input_dev.id))
+                "mycodo.max31865_{id}".format(id=input_dev.unique_id.split('-')[0]))
+
             self.pin_clock = input_dev.pin_clock
             self.pin_cs = input_dev.pin_cs
             self.pin_miso = input_dev.pin_miso
             self.pin_mosi = input_dev.pin_mosi
             self.thermocouple_type = input_dev.thermocouple_type
             self.ref_ohm = input_dev.ref_ohm
-            self.convert_to_unit = input_dev.convert_to_unit
             self.sensor = max31865_sen(self.pin_cs,
                                        self.pin_miso,
                                        self.pin_mosi,
                                        self.pin_clock)
 
-    def __repr__(self):
-        """  Representation of object """
-        return "<{cls}(temperature={temp})>".format(
-            cls=type(self).__name__,
-            temp="{0:.2f}".format(self._temperature))
-
-    def __str__(self):
-        """ Return measurement information """
-        return "Temperature: {temp}".format(
-            temp="{0:.2f}".format(self._temperature))
-
-    def __iter__(self):  # must return an iterator
-        """ SensorClass iterates through live measurement readings """
-        return self
-
-    def next(self):
-        """ Get next measurement reading """
-        if self.read():  # raised an error
-            raise StopIteration  # required
-        return dict(temperature=float('{0:.2f}'.format(self._temperature)))
-
-    @property
-    def temperature(self):
-        """ MAX31865 temperature in Celsius """
-        if self._temperature is None:  # update if needed
-            self.read()
-        return self._temperature
-
     def get_measurement(self):
         """ Gets the measurement in units by reading the """
-        self._temperature = None
-        temp = self.sensor.readTemp(self.thermocouple_type, self.ref_ohm)
-        temp = convert_units(
-            'temperature', 'celsius', self.convert_to_unit, temp)
-        return temp
+        return_dict = measurements_dict.copy()
 
-    def read(self):
-        """
-        Takes a reading from the MAX31865 and updates the
-        self._temperature value
+        return_dict[0]['value'] = self.sensor.readTemp(
+            self.thermocouple_type, self.ref_ohm)
 
-        :returns: None on success or 1 on error
-        """
-        try:
-            self._temperature = self.get_measurement()
-            if self._temperature is not None:
-                return  # success - no errors
-        except Exception as e:
-            self.logger.exception(
-                "{cls} raised an exception when taking a reading: "
-                "{err}".format(cls=type(self).__name__, err=e))
-        return 1
+        return return_dict
 
     def stop_sensor(self):
         """ Called by InputController class when sensors are deactivated """
@@ -191,15 +189,15 @@ class max31865_sen(object):
         [rtd_msb, rtd_lsb] = [out[1], out[2]]
         rtd_ADC_Code = ((rtd_msb << 8) | rtd_lsb) >> 1
 
-        temp_C = self.calcPTTemp(rtd_ADC_Code, device, resistor_ref)
+        temp_c = self.calcPTTemp(rtd_ADC_Code, device, resistor_ref)
         # print("Temperature: {temp} C".format(temp=temp_C))
 
-        [hft_msb, hft_lsb] = [out[3], out[4]]
-        hft = ((hft_msb << 8) | hft_lsb) >> 1
+        # [hft_msb, hft_lsb] = [out[3], out[4]]
+        # hft = ((hft_msb << 8) | hft_lsb) >> 1
         # print("high fault threshold: {}".format(hft))
 
-        [lft_msb, lft_lsb] = [out[5], out[6]]
-        lft = ((lft_msb << 8) | lft_lsb) >> 1
+        # [lft_msb, lft_lsb] = [out[5], out[6]]
+        # lft = ((lft_msb << 8) | lft_lsb) >> 1
         # print("low fault threshold: {}".format(lft))
 
         status = out[7]
@@ -215,14 +213,14 @@ class max31865_sen(object):
         # bits 1,0 don't care
         # print "Status byte: %x" % status
 
-        if ((status & 0x80) == 1):
+        if (status & 0x80) == 1:
             raise FaultError("High threshold limit (Cable fault/open)")
-        if ((status & 0x40) == 1):
+        if (status & 0x40) == 1:
             raise FaultError("Low threshold limit (Cable fault/short)")
-        if ((status & 0x04) == 1):
+        if (status & 0x04) == 1:
             raise FaultError("Overvoltage or Undervoltage Error")
 
-        return temp_C
+        return temp_c
 
     def writeRegister(self, regNum, dataByte):
         self.GPIO.output(self.csPin, self.GPIO.LOW)
@@ -244,7 +242,7 @@ class max31865_sen(object):
         # 0x to specify 'read register value'
         self.sendByte(regNumStart)
 
-        for byte in range(numRegisters):
+        for _ in range(numRegisters):
             data = self.recvByte()
             out.append(data)
 
@@ -252,7 +250,7 @@ class max31865_sen(object):
         return out
 
     def sendByte(self, byte):
-        for bit in range(8):
+        for _ in range(8):
             self.GPIO.output(self.clkPin, self.GPIO.HIGH)
             if (byte & 0x80):
                 self.GPIO.output(self.mosiPin, self.GPIO.HIGH)
@@ -263,7 +261,7 @@ class max31865_sen(object):
 
     def recvByte(self):
         byte = 0x00
-        for bit in range(8):
+        for _ in range(8):
             self.GPIO.output(self.clkPin, self.GPIO.HIGH)
             byte <<= 1
             if self.GPIO.input(self.misoPin):
@@ -271,7 +269,8 @@ class max31865_sen(object):
             self.GPIO.output(self.clkPin, self.GPIO.LOW)
         return byte
 
-    def calcPTTemp(self, RTD_ADC_Code, device='PT100', resistor_ref=None):
+    @staticmethod
+    def calcPTTemp(RTD_ADC_Code, device='PT100', resistor_ref=None):
         # Reference Resistor
         if resistor_ref:
             R_REF = resistor_ref
@@ -325,12 +324,10 @@ class FaultError(Exception):
 
 
 if __name__ == "__main__":
-    import max31865
-
     csPin = 8
     misoPin = 9
     mosiPin = 10
     clkPin = 11
-    max = max31865.max31865(csPin, misoPin, mosiPin, clkPin)
-    tempC = max.readTemp('PT100')
-    max.cleanupGPIO()
+    max_input = max31865_sen(csPin, misoPin, mosiPin, clkPin)
+    print("Temp: {}".format(max_input.readTemp('PT100', 400)))
+    max_input.cleanupGPIO()

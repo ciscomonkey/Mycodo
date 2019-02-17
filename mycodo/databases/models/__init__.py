@@ -22,25 +22,37 @@
 import subprocess
 
 import sqlalchemy
+from sqlalchemy import and_
 from flask import current_app
 
 from mycodo.config import ALEMBIC_VERSION
 from mycodo.config import INSTALL_DIRECTORY
 from mycodo.config import USER_ROLES
+from mycodo.config_devices_units import UNIT_CONVERSIONS
 from mycodo.mycodo_flask.extensions import db
 from .alembic_version import AlembicVersion
 from .camera import Camera
-from .conditional import Conditional
-from .conditional import ConditionalActions
 from .dashboard import Dashboard
 from .display_order import DisplayOrder
+from .function import Actions
+from .function import Conditional
+from .function import ConditionalConditions
+from .function import Function
+from .function import Trigger
 from .input import Input
 from .lcd import LCD
 from .lcd import LCDData
 from .math import Math
+from .measurement import Conversion
+from .measurement import DeviceMeasurements
+from .measurement import Measurement
+from .measurement import Unit
 from .method import Method
 from .method import MethodData
+from .misc import EnergyUsage
 from .misc import Misc
+from .notes import NoteTags
+from .notes import Notes
 from .output import Output
 from .pid import PID
 from .remote import Remote
@@ -141,3 +153,15 @@ def populate_db():
         Misc(id=1).save()
     if not SMTP.query.count():
         SMTP(id=1).save()
+
+    # Populate conversion tables
+    for (conv_from, conv_to, equation) in UNIT_CONVERSIONS:
+        if not Conversion.query.filter(
+                and_(Conversion.convert_unit_from == conv_from,
+                     Conversion.convert_unit_to == conv_to)).count():
+            new_conv = Conversion()
+            new_conv.protected = True
+            new_conv.convert_unit_from = conv_from
+            new_conv.convert_unit_to = conv_to
+            new_conv.equation = equation
+            new_conv.save()

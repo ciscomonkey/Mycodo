@@ -1,70 +1,85 @@
 # coding=utf-8
 import logging
 
+from mycodo.inputs.base_input import AbstractInput
 from mycodo.utils.system_pi import str_is_float
-from .base_input import AbstractInput
-from .sensorutils import convert_units
+
+# Measurements
+measurements_dict = {
+    0: {
+        'measurement': 'temperature',
+        'unit': 'C'
+    }
+}
+
+# Input information
+INPUT_INFORMATION = {
+    'input_name_unique': 'ATLAS_PT1000',
+    'input_manufacturer': 'Atlas',
+    'input_name': 'Atlas PT-1000',
+    'measurements_name': 'Temperature',
+    'measurements_dict': measurements_dict,
+
+    'options_enabled': [
+        'ftdi_location',
+        'i2c_location',
+        'uart_location',
+        'period',
+        'pre_output'],
+    'options_disabled': ['interface'],
+
+    'dependencies_module': [
+        ('pip-pypi', 'pylibftdi', 'pylibftdi')
+    ],
+
+    'interfaces': ['I2C', 'UART', 'FTDI'],
+    'i2c_location': ['0x66'],
+    'i2c_address_editable': True,
+    'uart_location': '/dev/ttyAMA0'
+}
 
 
-class AtlasPT1000Sensor(AbstractInput):
+class InputModule(AbstractInput):
     """ A sensor support class that monitors the PT1000's temperature """
 
     def __init__(self, input_dev, testing=False):
-        super(AtlasPT1000Sensor, self).__init__()
+        super(InputModule, self).__init__()
         self.logger = logging.getLogger("mycodo.inputs.atlas_pt1000")
-        self._temperature = None
+        self.atlas_sensor_ftdi = None
         self.atlas_sensor_uart = None
         self.atlas_sensor_i2c = None
 
         if not testing:
             self.logger = logging.getLogger(
-                "mycodo.inputs.atlas_pt1000_{id}".format(id=input_dev.id))
+                "mycodo.inputs.atlas_pt1000_{id}".format(id=input_dev.unique_id.split('-')[0]))
+
             self.interface = input_dev.interface
-            self.device_loc = input_dev.device_loc
-            self.i2c_address = int(str(input_dev.location), 16)
-            self.i2c_bus = input_dev.i2c_bus
-            self.convert_to_unit = input_dev.convert_to_unit
+            if self.interface == 'FTDI':
+                self.ftdi_location = input_dev.ftdi_location
+            elif self.interface == 'UART':
+                self.uart_location = input_dev.uart_location
+            elif self.interface == 'I2C':
+                self.i2c_address = int(str(input_dev.i2c_location), 16)
+                self.i2c_bus = input_dev.i2c_bus
             self.initialize_sensor()
 
-    def __repr__(self):
-        """  Representation of object """
-        return "<{cls}(temperature={temp})>".format(
-            cls=type(self).__name__,
-            temp="{0:.2f}".format(self._temperature))
-
-    def __str__(self):
-        """ Return temperature information """
-        return "Temperature: {temp}".format(
-            temp="{0:.2f}".format(self._temperature))
-
-    def __iter__(self):  # must return an iterator
-        """ Atlas_PT1000Sensor iterates through live temperature readings """
-        return self
-
-    def next(self):
-        """ Get next temperature reading """
-        if self.read():  # raised an error
-            raise StopIteration  # required
-        return dict(temperature=float('{0:.2f}'.format(self._temperature)))
-
-    @property
-    def temperature(self):
-        """ CPU temperature in celsius """
-        if self._temperature is None:  # update if needed
-            self.read()
-        return self._temperature
-
     def initialize_sensor(self):
+        from mycodo.devices.atlas_scientific_ftdi import AtlasScientificFTDI
         from mycodo.devices.atlas_scientific_i2c import AtlasScientificI2C
         from mycodo.devices.atlas_scientific_uart import AtlasScientificUART
-        if self.interface == 'UART':
+        if self.interface == 'FTDI':
             self.logger = logging.getLogger(
-                "mycodo.inputs.atlas_pt1000_{loc}".format(
-                    loc=self.device_loc))
-            self.atlas_sensor_uart = AtlasScientificUART(self.device_loc)
+                "mycodo.inputs.atlas_pt1000_ftdi_{ftdi}".format(
+                    ftdi=self.ftdi_location))
+            self.atlas_sensor_ftdi = AtlasScientificFTDI(self.ftdi_location)
+        elif self.interface == 'UART':
+            self.logger = logging.getLogger(
+                "mycodo.inputs.atlas_pt1000_uart_{uart}".format(
+                    uart=self.uart_location))
+            self.atlas_sensor_uart = AtlasScientificUART(self.uart_location)
         elif self.interface == 'I2C':
             self.logger = logging.getLogger(
-                "mycodo.inputs.atlas_pt1000_{bus}_{add}".format(
+                "mycodo.inputs.atlas_pt1000_i2c_{bus}_{add}".format(
                     bus=self.i2c_bus, add=self.i2c_address))
             self.atlas_sensor_i2c = AtlasScientificI2C(
                 i2c_address=self.i2c_address, i2c_bus=self.i2c_bus)
@@ -73,10 +88,34 @@ class AtlasPT1000Sensor(AbstractInput):
 
     def get_measurement(self):
         """ Gets the Atlas PT1000's temperature in Celsius """
-        self._temperature = None
         temp = None
 
-        if self.interface == 'UART':
+        return_dict = measurements_dict.copy()
+
+        if self.interface == 'FTDI':
+            if self.atlas_sensor_ftdi.setup:
+                lines = self.atlas_sensor_ftdi.query('R')
+                self.logger.debug("All Lines: {lines}".format(lines=lines))
+
+                if 'check probe' in lines:
+                    self.logger.error('"check probe" returned from sensor')
+                elif isinstance(lines, list):
+                    if str_is_float(lines[0]):
+                        temp = float(lines[0])
+                        self.logger.debug(
+                            'Value[0] is float: {val}'.format(val=temp))
+                elif str_is_float(lines):
+                    temp = float(lines)
+                    self.logger.debug(
+                        'Value is float: {val}'.format(val=temp))
+                else:
+                    self.logger.error(
+                        'Unknown value: {val}'.format(val=lines))
+            else:
+                self.logger.error('FTDI device is not set up. '
+                                  'Check the log for errors.')
+
+        elif self.interface == 'UART':
             if self.atlas_sensor_uart.setup:
                 lines = self.atlas_sensor_uart.query('R')
                 self.logger.debug("All Lines: {lines}".format(lines=lines))
@@ -108,23 +147,6 @@ class AtlasPT1000Sensor(AbstractInput):
                 self.logger.error('I2C device is not set up.'
                                   'Check the log for errors.')
 
-        temp = convert_units(
-            'temperature', 'celsius', self.convert_to_unit, temp)
+        return_dict[0]['value'] = temp
 
-        return temp
-
-    def read(self):
-        """
-        Takes a reading from the PT-1000 and updates self._temperature
-
-        :returns: None on success or 1 on error
-        """
-        try:
-            self._temperature = self.get_measurement()
-            if self._temperature is not None:
-                return  # success - no errors
-        except Exception as e:
-            self.logger.exception(
-                "{cls} raised an exception when taking a reading: "
-                "{err}".format(cls=type(self).__name__, err=e))
-        return 1
+        return return_dict
